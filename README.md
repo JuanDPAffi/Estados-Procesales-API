@@ -94,7 +94,7 @@ GRAPH_SCOPE=https://graph.microsoft.com/.default
 MAIL_DEFAULT_FROM=noreply@tudominio.com
 
 # Configuración de correos
-MAIL_BRAND_NAME=Redelex Panel
+MAIL_BRAND_NAME=Estados Procesales
 MAIL_LOGO_URL=https://tudominio.com/logo.png
 MAIL_FOOTER_TEXT=Affi Latam · Todos los derechos reservados
 

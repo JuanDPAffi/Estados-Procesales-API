@@ -31,7 +31,7 @@ export class MsGraphMailAdapter {
     this.fromAddress = this.configService.get<string>('MAIL_DEFAULT_FROM');
     this.brandName = this.configService.get<string>(
       'MAIL_BRAND_NAME',
-      'Redelex Panel',
+      'Estados Procesales',
     );
     this.logoUrl = this.configService.get<string>('MAIL_LOGO_URL');
     this.footerText = this.configService.get<string>(
@@ -212,7 +212,7 @@ export class MsGraphMailAdapter {
                                 font-size:14px; 
                                 font-weight:600; 
                                 display:inline-block;">
-                        Iniciar sesión en Redelex Panel
+                        Iniciar sesión en Estados Procesales
                         </a>
                     </td>
                     </tr>

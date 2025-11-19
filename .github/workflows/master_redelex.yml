@@ -52,4 +52,4 @@ jobs:
           app-name: 'Redelex'
           slot-name: 'Production'
           package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_8E3C25589592487997BD2CE782D12AD0 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_5685E20C3BF0482ABE3EBAF48E80C489 }}

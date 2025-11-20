@@ -17,8 +17,8 @@ import {
   ProcesosPorIdentificacionResponse,
   InformeCedulaItem,
   MedidaCautelarDto,
-  InformeInmobiliarRaw, // Importado
-  InformeInmobiliarDto, // Importado
+  InformeInmobiliariaRaw,
+  InformeInmobiliariaDto,
 } from '../dto/redelex.dto';
 
 @Injectable()
@@ -27,6 +27,9 @@ export class RedelexService {
   private readonly baseUrl = 'https://cloudapp.redelex.com/api';
   private readonly apiKey: string;
 
+  // OPTIMIZACIÓN 1: Variable para manejar la promesa de refresco y evitar race conditions
+  private tokenRefreshPromise: Promise<string> | null = null;
+
   constructor(
     @InjectModel(RedelexToken.name)
     private readonly redelexTokenModel: Model<RedelexTokenDocument>,
@@ -34,26 +37,39 @@ export class RedelexService {
     private readonly cedulaProcesoModel: Model<CedulaProcesoDocument>,
     private readonly configService: ConfigService,
   ) {
-    this.apiKey = this.configService.get<string>('REDELEX_API_KEY');
+    this.apiKey = this.configService.get<string>('REDELEX_API_KEY') || '';
     if (!this.apiKey) {
       this.logger.warn('REDELEX_API_KEY no está configurado');
     }
   }
 
   async getValidAuthToken(): Promise<string> {
+    // Si ya hay una renovación en curso, devolvemos esa promesa para que todos esperen
+    if (this.tokenRefreshPromise) {
+      return this.tokenRefreshPromise;
+    }
+
     let tokenDoc = await this.redelexTokenModel
       .findOne()
       .sort({ createdAt: -1 });
 
-    if (!tokenDoc) {
-      return await this.generateAndStoreToken();
-    }
-
-    if (new Date() > tokenDoc.expiresAt) {
-      return await this.generateAndStoreToken();
+    // Margen de seguridad de 60 segundos para considerar el token expirado antes de tiempo
+    if (!tokenDoc || new Date(Date.now() + 60000) > tokenDoc.expiresAt) {
+      return await this.handleTokenRefresh();
     }
 
     return tokenDoc.token;
+  }
+
+  // Wrapper para gestionar la promesa de refresco
+  private async handleTokenRefresh(): Promise<string> {
+    if (this.tokenRefreshPromise) return this.tokenRefreshPromise;
+
+    this.tokenRefreshPromise = this.generateAndStoreToken().finally(() => {
+      this.tokenRefreshPromise = null; // Limpiamos la promesa al terminar (éxito o error)
+    });
+
+    return this.tokenRefreshPromise;
   }
 
   private async generateAndStoreToken(): Promise<string> {
@@ -61,6 +77,8 @@ export class RedelexService {
       throw new Error('REDELEX_API_KEY no configurado');
     }
 
+    this.logger.log('Generando nuevo token de Redelex...');
+    
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
@@ -74,7 +92,6 @@ export class RedelexService {
     await this.redelexTokenModel.create({ token: authToken, expiresAt });
 
     this.logger.log('Nuevo token de Redelex generado y almacenado');
-
     return authToken;
   }
 
@@ -90,8 +107,9 @@ export class RedelexService {
       ).data;
     } catch (err: any) {
       if (err.response?.status === 401) {
-        this.logger.warn('Token expirado, regenerando...');
-        token = await this.generateAndStoreToken();
+        this.logger.warn('Token expirado (401), forzando regeneración...');
+        // Forzamos regeneración
+        token = await this.handleTokenRefresh();
 
         return (
           await axios.get(url, {
@@ -100,7 +118,6 @@ export class RedelexService {
           })
         ).data;
       }
-
       throw err;
     }
   }
@@ -118,28 +135,19 @@ export class RedelexService {
     return this.mapRedelexProcesoToDto(raw);
   }
 
-  // --- NUEVO MÉTODO PARA INMOBILIAR ---
-  async getInformeInmobiliar(informeId: number): Promise<InformeInmobiliarDto[]> {
-    if (!this.apiKey) {
-      throw new Error('REDELEX_API_KEY no configurado');
-    }
+  async getInformeInmobiliaria(informeId: number): Promise<InformeInmobiliariaDto[]> {
+    if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
-    // 1. Consumir API Externa
     const data = await this.secureRedelexGet(
       `${this.baseUrl}/Informes/GetInformeJson`,
-      {
-        token: this.apiKey,
-        informeId,
-      },
+      { token: this.apiKey, informeId },
     );
 
-    // 2. Parsear el string JSON que viene dentro de la respuesta
     const rawString = data.jsonString as string;
     if (!rawString) return [];
     
-    const items = JSON.parse(rawString) as InformeInmobiliarRaw[];
+    const items = JSON.parse(rawString) as InformeInmobiliariaRaw[];
 
-    // 3. Mapear a DTO limpio
     return items.map((item) => ({
       idProceso: item['ID Proceso'],
       claseProceso: item['Clase Proceso'],
@@ -152,85 +160,81 @@ export class RedelexService {
       fechaRecepcionProceso: item['Fecha Recepcion Proceso'],
       sentenciaPrimeraInstancia: item['Sentencia - Primera Instancia'],
       despacho: item['Despacho'],
-      numeroRadicacion: item['Numero Radicacion'] ? item['Numero Radicacion'].replace(/'/g, '') : '', // Quitamos comillas extra si vienen
+      numeroRadicacion: item['Numero Radicacion'] ? String(item['Numero Radicacion']).replace(/'/g, '') : '',
       ciudadInmueble: item['CIUDAD DEL INMUEBLE'],
     }));
   }
 
+  // OPTIMIZACIÓN 2: Procesamiento por Lotes (Batching)
   async syncInformeCedulaProceso(informeId: number) {
-    if (!this.apiKey) {
-      throw new Error('REDELEX_API_KEY no configurado');
-    }
+    if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
+    this.logger.log(`Iniciando descarga de informe ID: ${informeId}`);
     const data = await this.secureRedelexGet(
       `${this.baseUrl}/Informes/GetInformeJson`,
-      {
-        token: this.apiKey,
-        informeId,
-      },
+      { token: this.apiKey, informeId },
     );
 
     const raw = data.jsonString as string;
+    if (!raw) return { total: 0, upserted: 0, modified: 0, deleted: 0 };
+
     const items = JSON.parse(raw) as InformeCedulaItem[];
+    const total = items.length;
+    this.logger.log(`Informe descargado. Total registros a procesar: ${total}`);
 
     const procesosFromJson = new Set<number>();
+    let upserted = 0;
+    let modified = 0;
 
-    const bulkOps = items.map((item) => {
-      const procesoId = Math.round(item['ID Proceso']);
-      procesosFromJson.add(procesoId);
+    // Tamaño del lote para no saturar la memoria ni la conexión a Mongo
+    const BATCH_SIZE = 1000; 
+    
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const chunk = items.slice(i, i + BATCH_SIZE);
+      const bulkOps = chunk.map((item) => {
+        const procesoId = Math.round(item['ID Proceso']);
+        procesosFromJson.add(procesoId);
 
-      const demandadoNombre = String(item['Demandado - Nombre'] ?? '').trim();
-      const demandadoIdentificacion = String(
-        item['Demandado - Identificacion'] ?? '',
-      ).trim();
-      const demandanteNombre = String(
-        item['Demandante - Nombre'] ?? '',
-      ).trim();
-      const demandanteIdentificacion = String(
-        item['Demandante - Identificacion'] ?? '',
-      ).trim();
-
-      return {
-        updateOne: {
-          filter: { procesoId },
-          update: {
-            $set: {
-              procesoId,
-              demandadoNombre,
-              demandadoIdentificacion,
-              demandanteNombre,
-              demandanteIdentificacion,
+        return {
+          updateOne: {
+            filter: { procesoId },
+            update: {
+              $set: {
+                procesoId,
+                claseProceso: String(item['Clase Proceso'] ?? '').trim(),
+                demandadoNombre: String(item['Demandado - Nombre'] ?? '').trim(),
+                demandadoIdentificacion: String(item['Demandado - Identificacion'] ?? '').trim(),
+                demandanteNombre: String(item['Demandante - Nombre'] ?? '').trim(),
+                demandanteIdentificacion: String(item['Demandante - Identificacion'] ?? '').trim(),
+              },
             },
+            upsert: true,
           },
-          upsert: true,
-        },
-      };
-    });
+        };
+      });
 
-    if (bulkOps.length === 0) {
-      const deleteResult = await this.cedulaProcesoModel.deleteMany({});
-      return {
-        total: 0,
-        upserted: 0,
-        modified: 0,
-        deleted: deleteResult.deletedCount ?? 0,
-      };
+      if (bulkOps.length > 0) {
+        const res = await this.cedulaProcesoModel.bulkWrite(bulkOps, { ordered: false });
+        upserted += res.upsertedCount;
+        modified += res.modifiedCount;
+      }
     }
 
-    const [bulkResult, deleteResult] = await Promise.all([
-      this.cedulaProcesoModel.bulkWrite(bulkOps, { ordered: false }),
-      this.cedulaProcesoModel.deleteMany({
-        procesoId: { $nin: Array.from(procesosFromJson) },
-      }),
-    ]);
+    // OPTIMIZACIÓN DE BORRADO:
+    // Si el set es muy grande, $nin puede fallar.
+    // Nota: Si el informe trae SIEMPRE todos los procesos vigentes, esta lógica es correcta.
+    const idsProcesados = Array.from(procesosFromJson);
+    let deleted = 0;
 
-    const total = items.length;
-    const upserted = bulkResult.upsertedCount ?? 0;
-    const modified = bulkResult.modifiedCount ?? 0;
-    const deleted = deleteResult.deletedCount ?? 0;
+    // Si son muchísimos IDs, es mejor hacerlo en batch o con cuidado. 
+    // Para < 50k registros, $nin suele aguantar, pero cuidado con > 100k.
+    const deleteResult = await this.cedulaProcesoModel.deleteMany({
+        procesoId: { $nin: idsProcesados },
+    });
+    deleted = deleteResult.deletedCount ?? 0;
 
     this.logger.log(
-      `Sincronización completada: ${total} total, ${upserted} insertados, ${modified} modificados, ${deleted} eliminados`,
+      `Sync completada: ${total} procesados, ${upserted} insertados, ${modified} act., ${deleted} eliminados`,
     );
 
     return { total, upserted, modified, deleted };
@@ -240,23 +244,15 @@ export class RedelexService {
     identificacion: string,
   ): Promise<ProcesosPorIdentificacionResponse> {
     const value = identificacion.trim();
+    // Escapamos caracteres especiales para evitar inyecciones de Regex
     const pattern = this.escapeRegex(value);
 
+    // Búsqueda insensible a mayúsculas/minúsculas
     const docs = await this.cedulaProcesoModel
       .find({
         $or: [
-          {
-            demandadoIdentificacion: {
-              $regex: pattern,
-              $options: 'i',
-            },
-          },
-          {
-            demandanteIdentificacion: {
-              $regex: pattern,
-              $options: 'i',
-            },
-          },
+          { demandadoIdentificacion: { $regex: pattern, $options: 'i' } },
+          { demandanteIdentificacion: { $regex: pattern, $options: 'i' } },
         ],
       })
       .sort({ procesoId: 1 });
@@ -267,6 +263,7 @@ export class RedelexService {
       demandadoIdentificacion: d.demandadoIdentificacion || '',
       demandanteNombre: d.demandanteNombre || '',
       demandanteIdentificacion: d.demandanteIdentificacion || '',
+      claseProceso: d.claseProceso || '',
     }));
 
     return {
@@ -297,35 +294,29 @@ export class RedelexService {
 
     const sujetos = Array.isArray(p.Sujetos) ? p.Sujetos : [];
     const abogados = Array.isArray(p.Abogados) ? p.Abogados : [];
-    const medidas = Array.isArray(p.MedidasCautelares)
-      ? p.MedidasCautelares
-      : [];
+    const medidas = Array.isArray(p.MedidasCautelares) ? p.MedidasCautelares : [];
 
     const medidasValidas: MedidaCautelarDto[] = medidas
-      .filter((m: any) => {
-        const efectiva = (m.MedidaEfectiva || '').trim().toUpperCase();
-        return efectiva !== 'N';
-      })
+      .filter((m: any) => (m.MedidaEfectiva || '').trim().toUpperCase() !== 'N')
       .map((m: any) => this.mapMedidaCautelar(m));
 
+    // Ordenar actuaciones por fecha descendente
     const actuaciones = Array.isArray(p.Actuaciones) ? p.Actuaciones : [];
-    const ultimaActuacion =
-      actuaciones
-        .slice()
-        .sort((a: any, b: any) => {
-          const fa = new Date(a.FechaActuacion || 0).getTime();
-          const fb = new Date(b.FechaActuacion || 0).getTime();
-          return fb - fa;
-        })[0] || null;
+    // Usamos slice() para no mutar el array original si se reutiliza
+    const ultimaActuacion = actuaciones.length > 0 
+        ? actuaciones.slice().sort((a: any, b: any) => {
+            const fa = new Date(a.FechaActuacion || 0).getTime();
+            const fb = new Date(b.FechaActuacion || 0).getTime();
+            return fb - fa;
+          })[0] 
+        : null;
 
     const camposPersonalizados = Array.isArray(p.CamposPersonalizados)
       ? p.CamposPersonalizados
       : [];
 
     const campoUbicacionContrato = camposPersonalizados.find((c: any) =>
-      String(c.Nombre || '')
-        .toUpperCase()
-        .includes('UBICACION CONTRATO'),
+      String(c.Nombre || '').toUpperCase().includes('UBICACION CONTRATO'),
     );
 
     const calif = p.CalificacionContingenciaProceso || {};

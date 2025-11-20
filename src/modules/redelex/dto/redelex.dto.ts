@@ -7,6 +7,7 @@ export interface ProcesoResumenDto {
   demandadoIdentificacion: string;
   demandanteNombre: string;
   demandanteIdentificacion: string;
+  claseProceso: string;
 }
 
 export interface ProcesosPorIdentificacionResponse {
@@ -66,7 +67,7 @@ export type InformeCedulaItem = {
 // --- NUEVAS INTERFACES PARA INMOBILIAR ---
 
 // 1. Estructura RAW (Como viene de Redelex con espacios y mayúsculas)
-export interface InformeInmobiliarRaw {
+export interface InformeInmobiliariaRaw {
   'ID Proceso': number;
   'Demandado - Identificacion': string;
   'Demandado - Nombre': string;
@@ -82,7 +83,7 @@ export interface InformeInmobiliarRaw {
 }
 
 // 2. Estructura DTO (Limpia para tu Frontend)
-export interface InformeInmobiliarDto {
+export interface InformeInmobiliariaDto {
   idProceso: number;
   claseProceso: string,
   demandadoIdentificacion: string;

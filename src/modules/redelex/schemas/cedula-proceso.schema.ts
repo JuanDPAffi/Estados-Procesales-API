@@ -1,3 +1,4 @@
+// cedula-proceso.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -5,8 +6,11 @@ export type CedulaProcesoDocument = CedulaProceso & Document;
 
 @Schema({ timestamps: true })
 export class CedulaProceso {
-  @Prop({ required: true })
+  @Prop({ required: true, index: true })
   procesoId: number;
+
+  @Prop({ required: true })
+  claseProceso: string;
 
   @Prop({ required: true })
   demandadoNombre: string;
@@ -20,12 +24,10 @@ export class CedulaProceso {
   @Prop({ required: true })
   demandanteIdentificacion: string;
 
-  // Timestamps automáticos
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export const CedulaProcesoSchema = SchemaFactory.createForClass(CedulaProceso);
 
-// Índice único: un proceso solo debe existir una vez
 CedulaProcesoSchema.index({ procesoId: 1 }, { unique: true });

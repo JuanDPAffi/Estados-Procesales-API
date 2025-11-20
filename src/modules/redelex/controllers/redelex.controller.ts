@@ -42,7 +42,7 @@ export class RedelexController {
   async getInformeInmobiliar(
     @Param('informeId', ParseIntPipe) informeId: number,
   ) {
-    const data = await this.redelexService.getInformeInmobiliar(informeId);
+    const data = await this.redelexService.getInformeInmobiliaria(informeId);
 
     return {
       success: true,

@@ -16,7 +16,7 @@ export class User {
   })
   email: string;
 
-  @Prop({ required: true, minlength: 6 })
+  @Prop({ required: true, minlength: 8, select: false })
   password: string;
 
   @Prop({ 
@@ -26,9 +26,24 @@ export class User {
   })
   role: string;
 
-  // Timestamps automáticos
-  createdAt?: Date;
-  updatedAt?: Date;
+  // NUEVO: Control de acceso (Puntos 6 y 7)
+  @Prop({ default: true })
+  isActive: boolean;
+
+  // NUEVO: Verificación de correo (Punto 4)
+  @Prop({ default: false })
+  isVerified: boolean;
+
+  // Agrega este campo a tu clase User
+  @Prop({ select: false }) // Oculto por seguridad
+  activationToken?: string;
+
+  // NUEVOS: Datos de empresa (Punto 3)
+  @Prop({ required: false, trim: true })
+  nit?: string;
+
+  @Prop({ required: false, trim: true })
+  codigoInmobiliaria?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

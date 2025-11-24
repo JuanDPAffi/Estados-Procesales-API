@@ -4,7 +4,7 @@ import axios from 'axios';
 
 type CachedToken = {
   accessToken: string;
-  expiresAt: number; // timestamp ms
+  expiresAt: number;
 };
 
 @Injectable()
@@ -202,7 +202,7 @@ export class MsGraphMailAdapter {
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 8px 0;">
                     <tr>
                     <td align="center" style="padding: 12px 0;">
-                        <a href="https://salmon-pond-0de0b780f.3.azurestaticapps.net/auth/login" 
+                        <a href="https://estadosprocesales.affi.net/auth/login" 
                         style="background-color:#260086; 
                                 color:white; 
                                 padding:12px 24px; 
@@ -237,6 +237,131 @@ export class MsGraphMailAdapter {
             </td>
         </tr>
         </table>
+    </body>
+    </html>
+    `;
+  }
+
+  // --- PEGAR ESTO EN LA CLASE MsGraphMailAdapter ---
+
+  async sendActivationEmail(
+    to: string,
+    name: string,
+    activationLink: string,
+  ): Promise<void> {
+    if (!this.fromAddress) {
+      throw new Error('MAIL_DEFAULT_FROM no configurado');
+    }
+
+    const accessToken = await this.getAccessToken();
+
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
+      this.fromAddress,
+    )}/sendMail`;
+
+    const html = this.buildActivationEmailHtml(name, activationLink);
+
+    const message = {
+      message: {
+        subject: `Activa tu cuenta - ${this.brandName}`,
+        body: {
+          contentType: 'HTML',
+          content: html,
+        },
+        from: {
+          emailAddress: {
+            address: this.fromAddress,
+          },
+        },
+        toRecipients: [
+          {
+            emailAddress: {
+              address: to,
+            },
+          },
+        ],
+      },
+      saveToSentItems: true,
+    };
+
+    await axios.post(url, message, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  private buildActivationEmailHtml(name: string, activationLink: string): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Activa tu cuenta - ${this.brandName}</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f3f4f6;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f3f4f6; padding:24px 0;">
+        <tr>
+          <td align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 12px 30px rgba(15,23,42,0.12);">
+              <tr>
+                <td align="center" style="padding:24px 24px 12px 24px;">
+                  ${
+                    this.logoUrl
+                      ? `<img src="${this.logoUrl}" alt="${this.brandName}" style="max-width:120px; height:auto; display:block; margin-bottom:12px;" />`
+                      : ''
+                  }
+                  <h1 style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:20px; color:#111827;">
+                    ¡Bienvenido a ${this.brandName}!
+                  </h1>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 24px 24px 24px;">
+                  <p style="margin:0 0 12px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#111827;">
+                    Hola <strong>${name}</strong>,
+                  </p>
+                  <p style="margin:0 0 12px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#4b5563;">
+                    Gracias por registrarte. Para comenzar a utilizar la plataforma, es necesario que confirmes tu dirección de correo electrónico.
+                  </p>
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 8px 0; width:100%;">
+                    <tr>
+                      <td align="center">
+                        <a href="${activationLink}"
+                           style="background-color:#260086;
+                                  color:#ffffff;
+                                  padding:12px 24px;
+                                  border-radius:8px;
+                                  text-decoration:none;
+                                  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                                  font-size:14px;
+                                  font-weight:600;
+                                  display:inline-block;">
+                          Activar cuenta
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="margin:16px 0 0 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:12px; color:#9ca3af;">
+                    Si el botón no funciona, copia y pega este enlace: ${activationLink}
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 24px 18px 24px; background-color:#f9fafb; border-top:1px solid #e5e7eb;">
+                  <p style="margin:0 0 4px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
+                    Este es un mensaje automático, por favor no respondas a este correo.
+                  </p>
+                  <p style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
+                    ${this.footerText}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
     `;
@@ -320,3 +445,4 @@ export class MsGraphMailAdapter {
     `;
   }
 }
+

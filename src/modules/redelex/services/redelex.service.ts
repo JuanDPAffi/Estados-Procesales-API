@@ -27,6 +27,9 @@ export class RedelexService {
   private readonly baseUrl = 'https://cloudapp.redelex.com/api';
   private readonly apiKey: string;
 
+  // NUEVO: ID de licencia para pasar el WAF
+  private readonly licenseId = '2117C477-209F-44F5-9587-783D9F25BA8B';
+
   // OPTIMIZACIÓN 1: Variable para manejar la promesa de refresco y evitar race conditions
   private tokenRefreshPromise: Promise<string> | null = null;
 
@@ -78,10 +81,16 @@ export class RedelexService {
     }
 
     this.logger.log('Generando nuevo token de Redelex...');
-    
+
+    // MODIFICADO: Se agrega header api-license-id
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
+      {
+        headers: {
+          'api-license-id': this.licenseId,
+        },
+      },
     );
 
     const authToken = response.data.authToken;
@@ -98,11 +107,17 @@ export class RedelexService {
   async secureRedelexGet(url: string, params: any = {}) {
     let token = await this.getValidAuthToken();
 
+    // MODIFICADO: Objeto de headers unificado con la licencia
+    const headers = {
+      Authorization: token,
+      'api-license-id': this.licenseId,
+    };
+
     try {
       return (
         await axios.get(url, {
           params,
-          headers: { Authorization: token },
+          headers: headers,
         })
       ).data;
     } catch (err: any) {
@@ -111,10 +126,13 @@ export class RedelexService {
         // Forzamos regeneración
         token = await this.handleTokenRefresh();
 
+        // Actualizamos el token en los headers para el reintento
+        headers.Authorization = token;
+
         return (
           await axios.get(url, {
             params,
-            headers: { Authorization: token },
+            headers: headers,
           })
         ).data;
       }
@@ -135,7 +153,9 @@ export class RedelexService {
     return this.mapRedelexProcesoToDto(raw);
   }
 
-  async getInformeInmobiliaria(informeId: number): Promise<InformeInmobiliariaDto[]> {
+  async getInformeInmobiliaria(
+    informeId: number,
+  ): Promise<InformeInmobiliariaDto[]> {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
     const data = await this.secureRedelexGet(
@@ -145,7 +165,7 @@ export class RedelexService {
 
     const rawString = data.jsonString as string;
     if (!rawString) return [];
-    
+
     const items = JSON.parse(rawString) as InformeInmobiliariaRaw[];
 
     return items.map((item) => ({
@@ -160,7 +180,9 @@ export class RedelexService {
       fechaRecepcionProceso: item['Fecha Recepcion Proceso'],
       sentenciaPrimeraInstancia: item['Sentencia - Primera Instancia'],
       despacho: item['Despacho'],
-      numeroRadicacion: item['Numero Radicacion'] ? String(item['Numero Radicacion']).replace(/'/g, '') : '',
+      numeroRadicacion: item['Numero Radicacion']
+        ? String(item['Numero Radicacion']).replace(/'/g, '')
+        : '',
       ciudadInmueble: item['CIUDAD DEL INMUEBLE'],
     }));
   }
@@ -187,8 +209,8 @@ export class RedelexService {
     let modified = 0;
 
     // Tamaño del lote para no saturar la memoria ni la conexión a Mongo
-    const BATCH_SIZE = 1000; 
-    
+    const BATCH_SIZE = 1000;
+
     for (let i = 0; i < items.length; i += BATCH_SIZE) {
       const chunk = items.slice(i, i + BATCH_SIZE);
       const bulkOps = chunk.map((item) => {
@@ -202,10 +224,18 @@ export class RedelexService {
               $set: {
                 procesoId,
                 claseProceso: String(item['Clase Proceso'] ?? '').trim(),
-                demandadoNombre: String(item['Demandado - Nombre'] ?? '').trim(),
-                demandadoIdentificacion: String(item['Demandado - Identificacion'] ?? '').trim(),
-                demandanteNombre: String(item['Demandante - Nombre'] ?? '').trim(),
-                demandanteIdentificacion: String(item['Demandante - Identificacion'] ?? '').trim(),
+                demandadoNombre: String(
+                  item['Demandado - Nombre'] ?? '',
+                ).trim(),
+                demandadoIdentificacion: String(
+                  item['Demandado - Identificacion'] ?? '',
+                ).trim(),
+                demandanteNombre: String(
+                  item['Demandante - Nombre'] ?? '',
+                ).trim(),
+                demandanteIdentificacion: String(
+                  item['Demandante - Identificacion'] ?? '',
+                ).trim(),
               },
             },
             upsert: true,
@@ -214,7 +244,9 @@ export class RedelexService {
       });
 
       if (bulkOps.length > 0) {
-        const res = await this.cedulaProcesoModel.bulkWrite(bulkOps, { ordered: false });
+        const res = await this.cedulaProcesoModel.bulkWrite(bulkOps, {
+          ordered: false,
+        });
         upserted += res.upsertedCount;
         modified += res.modifiedCount;
       }
@@ -226,10 +258,10 @@ export class RedelexService {
     const idsProcesados = Array.from(procesosFromJson);
     let deleted = 0;
 
-    // Si son muchísimos IDs, es mejor hacerlo en batch o con cuidado. 
+    // Si son muchísimos IDs, es mejor hacerlo en batch o con cuidado.
     // Para < 50k registros, $nin suele aguantar, pero cuidado con > 100k.
     const deleteResult = await this.cedulaProcesoModel.deleteMany({
-        procesoId: { $nin: idsProcesados },
+      procesoId: { $nin: idsProcesados },
     });
     deleted = deleteResult.deletedCount ?? 0;
 
@@ -294,7 +326,9 @@ export class RedelexService {
 
     const sujetos = Array.isArray(p.Sujetos) ? p.Sujetos : [];
     const abogados = Array.isArray(p.Abogados) ? p.Abogados : [];
-    const medidas = Array.isArray(p.MedidasCautelares) ? p.MedidasCautelares : [];
+    const medidas = Array.isArray(p.MedidasCautelares)
+      ? p.MedidasCautelares
+      : [];
 
     const medidasValidas: MedidaCautelarDto[] = medidas
       .filter((m: any) => (m.MedidaEfectiva || '').trim().toUpperCase() !== 'N')
@@ -303,12 +337,13 @@ export class RedelexService {
     // Ordenar actuaciones por fecha descendente
     const actuaciones = Array.isArray(p.Actuaciones) ? p.Actuaciones : [];
     // Usamos slice() para no mutar el array original si se reutiliza
-    const ultimaActuacion = actuaciones.length > 0 
+    const ultimaActuacion =
+      actuaciones.length > 0
         ? actuaciones.slice().sort((a: any, b: any) => {
             const fa = new Date(a.FechaActuacion || 0).getTime();
             const fb = new Date(b.FechaActuacion || 0).getTime();
             return fb - fa;
-          })[0] 
+          })[0]
         : null;
 
     const camposPersonalizados = Array.isArray(p.CamposPersonalizados)
@@ -316,7 +351,9 @@ export class RedelexService {
       : [];
 
     const campoUbicacionContrato = camposPersonalizados.find((c: any) =>
-      String(c.Nombre || '').toUpperCase().includes('UBICACION CONTRATO'),
+      String(c.Nombre || '')
+        .toUpperCase()
+        .includes('UBICACION CONTRATO'),
     );
 
     const calif = p.CalificacionContingenciaProceso || {};

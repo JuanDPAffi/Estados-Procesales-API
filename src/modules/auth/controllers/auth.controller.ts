@@ -23,6 +23,13 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  // NUEVO ENDPOINT DE ACTIVACIÓN
+  @Post('activate')
+  @HttpCode(HttpStatus.OK)
+  async activateAccount(@Body() body: { email: string; token: string }) {
+    return this.authService.activateAccount(body.email, body.token);
+  }
+
   @Post('request-password-reset')
   @HttpCode(HttpStatus.OK)
   async requestPasswordReset(@Body() requestDto: RequestPasswordResetDto) {

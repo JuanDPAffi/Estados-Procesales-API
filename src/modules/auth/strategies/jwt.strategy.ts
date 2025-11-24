@@ -2,6 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User, UserDocument } from '../schemas/user.schema';
 
 export interface JwtPayload {
   id: string;
@@ -11,30 +14,34 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly configService: ConfigService) {
-    const secret = configService.get<string>('JWT_SECRET');
-
-    if (!secret) {
-      throw new Error('JWT_SECRET no está definido en las variables de entorno');
-    }
-
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret,
+      secretOrKey: configService.get<string>('JWT_SECRET'),
     });
   }
 
   async validate(payload: JwtPayload) {
-    if (!payload.id || !payload.email || !payload.role) {
-      throw new UnauthorizedException('Token inválido');
+    // Verificamos en BD cada vez que usan el token
+    const user = await this.userModel.findById(payload.id);
+
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
     }
 
-    // Este objeto se adjuntará a req.user
+    if (!user.isActive) {
+      throw new UnauthorizedException('Su cuenta ha sido desactivada');
+    }
+
+    // Retornamos los datos limpios al request
     return {
-      id: payload.id,
-      email: payload.email,
-      role: payload.role,
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
     };
   }
-}
+} 

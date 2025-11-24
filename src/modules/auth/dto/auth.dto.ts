@@ -1,6 +1,5 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength, Matches } from 'class-validator';
 
-// DTO para registro de usuario
 export class RegisterDto {
   @IsString()
   @IsNotEmpty()
@@ -12,15 +11,27 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty()
-  @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(
+    /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
+    { message: 'La contraseña debe contener mayúsculas, minúsculas, números y un carácter especial' }
+  )
   password: string;
 
   @IsString()
   @IsOptional()
   role?: string;
+
+  // Nuevos campos para lógica de inmobiliaria
+  @IsString()
+  @IsOptional()
+  nit?: string;
+
+  @IsString()
+  @IsOptional()
+  codigoInmobiliaria?: string;
 }
 
-// DTO para login
 export class LoginDto {
   @IsEmail()
   @IsNotEmpty()
@@ -31,14 +42,12 @@ export class LoginDto {
   password: string;
 }
 
-// DTO para solicitar reset de contraseña
 export class RequestPasswordResetDto {
   @IsEmail()
   @IsNotEmpty()
   email: string;
 }
 
-// DTO para resetear contraseña
 export class ResetPasswordDto {
   @IsEmail()
   @IsNotEmpty()
@@ -48,8 +57,13 @@ export class ResetPasswordDto {
   @IsNotEmpty()
   token: string;
 
+  // Aplicamos la misma seguridad al resetear
   @IsString()
   @IsNotEmpty()
-  @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @Matches(
+    /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
+    { message: 'La contraseña debe contener mayúsculas, minúsculas, números y un carácter especial' }
+  )
   password: string;
 }

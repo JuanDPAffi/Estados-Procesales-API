@@ -13,19 +13,17 @@ import {
   PasswordResetTokenSchema,
 } from './schemas/password-reset-token.schema';
 import { MailModule } from '../mail/mail.module';
+import { InmobiliariaModule } from '../inmobiliaria/inmobiliaria.module';
 
 @Module({
   imports: [
-    // Schemas de Mongoose
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: PasswordResetToken.name, schema: PasswordResetTokenSchema },
     ]),
 
-    // Passport para estrategias de autenticación
     PassportModule,
 
-    // JWT Module con configuración dinámica
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -37,11 +35,11 @@ import { MailModule } from '../mail/mail.module';
       inject: [ConfigService],
     }),
 
-    // Módulo de correos para notificaciones
     MailModule,
+    InmobiliariaModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [JwtAuthGuard], // Exportamos el guard para usarlo en otros módulos
+  exports: [JwtAuthGuard],
 })
 export class AuthModule {}

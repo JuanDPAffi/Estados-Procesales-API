@@ -22,12 +22,19 @@ import {
   RequestPasswordResetDto,
   ResetPasswordDto,
 } from '../dto/auth.dto';
+// 1. IMPORTAR EL SCHEMA DE INMOBILIARIA
+import { Inmobiliaria, InmobiliariaDocument } from '../../auth/schemas/inmobiliaria.schema'; // <--- NUEVO
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    
+    // 2. INYECTAR EL MODELO DE INMOBILIARIA
+    @InjectModel(Inmobiliaria.name) // <--- NUEVO
+    private readonly inmobiliariaModel: Model<InmobiliariaDocument>, // <--- NUEVO
+
     @InjectModel(PasswordResetToken.name)
     private readonly passwordResetTokenModel: Model<PasswordResetTokenDocument>,
     private readonly jwtService: JwtService,
@@ -41,71 +48,130 @@ export class AuthService {
       email: user.email,
       role: user.role,
     };
-
     return this.jwtService.sign(payload);
   }
 
   async register(registerDto: RegisterDto) {
-    const { name, email, password, role } = registerDto;
+    const { name, email, password, role, nit, codigoInmobiliaria } = registerDto;
 
-    // Verificar si el usuario ya existe
+    // 1. Verificar existencia del usuario
     const existingUser = await this.userModel.findOne({
       email: email.toLowerCase(),
     });
+    if (existingUser) throw new ConflictException('El email ya está registrado');
 
-    if (existingUser) {
-      throw new ConflictException('El email ya está registrado');
+    // 2. Validar datos obligatorios
+    if (!nit || !codigoInmobiliaria) {
+      throw new BadRequestException('NIT y Código de Inmobiliaria son obligatorios');
     }
 
-    // Hash de la contraseña
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Crear usuario
-    const user = await this.userModel.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      role: role || 'user',
+    // 3. Buscar la inmobiliaria
+    const inmobiliaria = await this.inmobiliariaModel.findOne({
+      nit: nit,
+      codigo: codigoInmobiliaria,
     });
 
-    // Generar token JWT
-    const token = this.generateToken(user);
+    if (!inmobiliaria) {
+      throw new BadRequestException('Datos de inmobiliaria inválidos (NIT o Código incorrectos)');
+    }
+    if (!inmobiliaria.isActive) {
+      throw new UnauthorizedException('Esta inmobiliaria se encuentra inactiva');
+    }
 
-    // Enviar correo de bienvenida (no bloquea si falla)
-    this.mailService.sendWelcomeEmail(user.email, user.name);
+    // ---------------------------------------------------------
+    // NUEVA LÓGICA CORREGIDA
+    // ---------------------------------------------------------
+
+    // Normalizamos el email para las comparaciones
+    const emailLower = email.toLowerCase();
+    const isAffiEmail = emailLower.endsWith('@affi.net');
+
+    // Identificamos si están intentando registrarse en la EMPRESA DUEÑA (AFFI)
+    // Usamos los datos exactos que me diste
+    const isAffiCorporate = (nit === '900053370' && codigoInmobiliaria === 'AFFI');
+
+    // REGLA 1: PROTECCIÓN CORPORATIVA
+    // Si intentan usar credenciales de AFFI, PERO el correo NO es @affi.net -> BLOQUEAR
+    if (isAffiCorporate && !isAffiEmail) {
+      throw new UnauthorizedException('Restringido: El código AFFI solo puede ser usado por correos corporativos @affi.net');
+    }
+
+    // REGLA 2: ASIGNACIÓN DE PROPIEDAD
+    if (isAffiCorporate) {
+      // CASO AFFI:
+      // No guardamos "emailRegistrado" porque Affi permite múltiples usuarios internos.
+      // Simplemente dejamos pasar (ya validamos arriba que sea @affi.net).
+    } else {
+      // CASO CLIENTE EXTERNO:
+      // Validamos unicidad (un solo dueño por inmobiliaria)
+      
+      // Si ya tiene dueño...
+      if (inmobiliaria.emailRegistrado) {
+        // ...y es diferente al que intenta registrarse -> ERROR
+        if (inmobiliaria.emailRegistrado !== emailLower) {
+           throw new ConflictException('Esta inmobiliaria ya tiene un usuario administrador registrado.');
+        }
+      } else {
+        // Si está libre, la asignamos a este usuario
+        inmobiliaria.emailRegistrado = emailLower;
+        await inmobiliaria.save();
+      }
+    }
+
+    // ---------------------------------------------------------
+
+    // 4. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const activationToken = crypto.randomBytes(32).toString('hex');
+
+    // 5. Crear usuario
+    const user = await this.userModel.create({
+      name,
+      email: emailLower,
+      password: hashedPassword,
+      role: role || 'user',
+      nit, 
+      codigoInmobiliaria,
+      activationToken: activationToken, 
+      isVerified: false, 
+      isActive: true, 
+    });
+
+    const frontBase = this.configService.get<string>('FRONT_BASE_URL') || 'http://localhost:4200';
+    const activationLink = `${frontBase}/auth/activate?token=${activationToken}&email=${encodeURIComponent(user.email)}`;
+
+    this.mailService.sendActivationEmail(user.email, user.name, activationLink);
 
     return {
-      message: 'Usuario registrado correctamente',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-      token,
+      message: 'Registro exitoso. Por favor revisa tu correo para activar la cuenta.',
     };
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    // Buscar usuario
     const user = await this.userModel.findOne({
       email: email.toLowerCase(),
-    });
+    }).select('+password');
 
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Verificar contraseña
+    if (!user.isVerified) {
+      throw new UnauthorizedException('Debes activar tu cuenta. Revisa tu correo electrónico.');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Usuario desactivado. Contacte al administrador.');
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Generar token JWT
     const token = this.generateToken(user);
 
     return {
@@ -120,6 +186,32 @@ export class AuthService {
     };
   }
 
+  async activateAccount(email: string, token: string) {
+    const user = await this.userModel.findOne({ 
+      email: email.toLowerCase() 
+    }).select('+activationToken');
+
+    if (!user) {
+      throw new BadRequestException('Usuario no encontrado');
+    }
+
+    if (user.isVerified) {
+      return { message: 'La cuenta ya estaba verificada. Puedes iniciar sesión.' };
+    }
+
+    if (user.activationToken !== token) {
+      throw new BadRequestException('Token de activación inválido o expirado');
+    }
+
+    user.isVerified = true;
+    user.activationToken = undefined; 
+    await user.save();
+
+    return {
+      message: 'Cuenta activada correctamente. Ya puedes iniciar sesión.',
+    };
+  }
+  
   async requestPasswordReset(requestDto: RequestPasswordResetDto) {
     const { email } = requestDto;
 
@@ -127,7 +219,6 @@ export class AuthService {
       email: email.toLowerCase(),
     });
 
-    // Para no revelar si el correo existe o no, siempre respondemos OK
     if (!user) {
       return {
         message:
@@ -135,26 +226,22 @@ export class AuthService {
       };
     }
 
-    // Generar token aleatorio
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto
       .createHash('sha256')
       .update(rawToken)
       .digest('hex');
 
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); 
 
-    // Limpiar tokens previos de este usuario
     await this.passwordResetTokenModel.deleteMany({ userId: user._id });
 
-    // Crear nuevo token
     await this.passwordResetTokenModel.create({
       userId: user._id,
       tokenHash,
       expiresAt,
     });
 
-    // Construir enlace de reset
     const frontBase =
       this.configService.get<string>('FRONT_BASE_URL') ||
       'http://localhost:4200';
@@ -162,7 +249,6 @@ export class AuthService {
       user.email,
     )}`;
 
-    // Enviar correo (no bloquea si falla)
     this.mailService.sendPasswordResetEmail(user.email, user.name, resetLink);
 
     return {
@@ -174,7 +260,6 @@ export class AuthService {
   async resetPassword(resetDto: ResetPasswordDto) {
     const { email, token, password } = resetDto;
 
-    // Buscar usuario
     const user = await this.userModel.findOne({
       email: email.toLowerCase(),
     });
@@ -183,7 +268,6 @@ export class AuthService {
       throw new BadRequestException('Enlace inválido o expirado');
     }
 
-    // Verificar token
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
     const tokenDoc = await this.passwordResetTokenModel.findOne({
@@ -196,12 +280,10 @@ export class AuthService {
       throw new BadRequestException('Enlace inválido o expirado');
     }
 
-    // Actualizar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
     user.password = hashedPassword;
     await user.save();
 
-    // Borrar tokens usados
     await this.passwordResetTokenModel.deleteMany({ userId: user._id });
 
     return {

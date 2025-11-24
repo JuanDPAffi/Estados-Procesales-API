@@ -48,4 +48,28 @@ export class MailService {
       // No lanzamos el error para no bloquear el proceso
     }
   }
+
+  /**
+   * Envía correo de activación de cuenta
+   * No lanza error si falla, solo registra en logs
+   */
+  async sendActivationEmail(
+    email: string,
+    name: string,
+    activationLink: string,
+  ): Promise<void> {
+    try {
+      await this.msGraphMailAdapter.sendActivationEmail(
+        email,
+        name,
+        activationLink,
+      );
+      this.logger.log(`Correo de activación enviado a: ${email}`);
+    } catch (error) {
+      this.logger.error(
+        `Error enviando correo de activación a ${email}:`,
+        error?.response?.data || error,
+      );
+    }
+  }
 }

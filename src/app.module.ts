@@ -4,22 +4,21 @@ import { DatabaseModule } from './config/database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedelexModule } from './modules/redelex/redelex.module';
 import { MailModule } from './modules/mail/mail.module';
+import { InmobiliariaModule } from './modules/inmobiliaria/inmobiliaria.module'; // <--- AGREGAR ESTO
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
-    // Configuración de variables de entorno
     ConfigModule.forRoot({
-      isGlobal: true, // Hace que ConfigService esté disponible globalmente
+      isGlobal: true,
       envFilePath: '.env',
     }),
-
-    // Módulo de conexión a MongoDB
     DatabaseModule,
-
-    // Módulos funcionales
     AuthModule,
     RedelexModule,
     MailModule,
+    InmobiliariaModule,
+    UsersModule,
   ],
   controllers: [],
   providers: [],

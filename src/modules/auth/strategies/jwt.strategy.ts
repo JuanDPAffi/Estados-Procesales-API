@@ -33,25 +33,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
-    // 1. Buscamos al usuario en BD (Esto garantiza Inactivación Inmediata)
+async validate(payload: JwtPayload) {
     const user = await this.userModel.findById(payload.id);
 
-    // 2. Si no existe o fue borrado
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado o sesión inválida');
     }
 
-    // 3. Si fue inactivado por el administrador
     if (!user.isActive) {
       throw new UnauthorizedException('Su cuenta ha sido desactivada');
     }
 
-    // 4. Retornamos datos frescos (Roles actualizados al instante)
+    // AQUI ESTABA EL ERROR: Faltaba pasar el nombre
     return {
       id: user._id.toString(),
+      name: user.name,
       email: user.email,
       role: user.role,
+      nit: user.nit 
     };
   }
 }

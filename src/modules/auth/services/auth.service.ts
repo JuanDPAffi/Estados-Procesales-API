@@ -188,7 +188,7 @@ export class AuthService {
         await user.save();
         
         throw new UnauthorizedException(
-          'Su cuenta ha sido desactivada por múltiples intentos fallidos. Contacte al administrador.'
+          'Su cuenta ha sido desactivada por múltiples intentos fallidos. Para reactivarla, restablezca su contraseña.'
         );
       } else {
         // ADVERTENCIA
@@ -318,6 +318,8 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     user.password = hashedPassword;
+    user.loginAttempts = 0;
+    user.isActive = true;
     await user.save();
 
     await this.passwordResetTokenModel.deleteMany({ userId: user._id });

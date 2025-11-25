@@ -163,7 +163,7 @@ export class AuthService {
     }
 
     if (!user.isActive) {
-      throw new UnauthorizedException('Usuario desactivado. Contacte al administrador.');
+      throw new UnauthorizedException('Su cuenta ha sido desactivada. Contacte al administrador.');
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

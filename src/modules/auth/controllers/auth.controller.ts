@@ -22,20 +22,28 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) response: Response) {
-    // Obtenemos el resultado de tu servicio
     const loginResult = await this.authService.login(loginDto);
     
-    // CORRECCIÓN AQUÍ: Usamos 'loginResult.token' en lugar de 'access_token'
-    // Configuración de la Cookie Segura
+    // --- LÓGICA INTELIGENTE (PROD vs DEV) ---
+    // Detectamos si estamos en Azure o en Localhost
+    const isProduction = process.env.NODE_ENV === 'production';
+
     response.cookie('redelex_token', loginResult.token, {
       httpOnly: true, 
-      secure: true,   
-      sameSite: 'none', 
-      domain: 'affi.net', // Compartido entre subdominios
-      maxAge: 1000 * 60 * 5, // 30 Minutos
+      
+      // En producción (HTTPS) es true, en local (HTTP) es false
+      secure: isProduction,   
+      
+      // 'none' requiere secure=true. En local usamos 'lax' para que no falle.
+      sameSite: isProduction ? 'none' : 'lax', 
+      
+      // En local NO ponemos dominio (usa localhost). En prod forzamos affi.net
+      domain: isProduction ? 'affi.net' : undefined, 
+      
+      // CORREGIDO: 30 Minutos reales
+      maxAge: 1000 * 60 * 30, 
     });
 
-    // Retornamos el usuario y mensaje (el token ya va oculto en la cookie)
     return {
       user: loginResult.user, 
       message: 'Login exitoso'
@@ -45,11 +53,14 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Res({ passthrough: true }) response: Response) {
+    // Usamos la misma lógica para poder borrar la cookie correctamente
+    const isProduction = process.env.NODE_ENV === 'production';
+
     response.cookie('redelex_token', '', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: 'affi.net', // Importante poner el dominio para poder borrarla
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      domain: isProduction ? 'affi.net' : undefined,
       expires: new Date(0), 
     });
     return { message: 'Sesión cerrada' };

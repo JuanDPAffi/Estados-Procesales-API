@@ -6,14 +6,31 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 1. Configuración de CORS para permitir Cookies (Credenciales)
+  // 1. DEFINIMOS QUIÉNES TIENEN PERMISO (Lista Blanca)
+  const allowedOrigins = [
+    'https://estadosprocesales.affi.net', // Tu web en producción
+    'http://localhost:4200'               // Tu entorno local
+  ];
+
+  // 2. Configuración de CORS Dinámica
   app.enableCors({
-    origin: 'https://estadosprocesales.affi.net', // <--- TU FRONTEND EXACTO
-    credentials: true, // <--- Obligatorio para que viajen las cookies
+    origin: (origin, callback) => {
+      // Permitir peticiones sin origen (como Postman o llamadas server-to-server)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        // Si el dominio está en la lista blanca, lo dejamos pasar
+        callback(null, true);
+      } else {
+        // Si no, lo bloqueamos y mostramos quién intentó entrar
+        console.log('⛔ Bloqueado por CORS:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true, // Obligatorio para cookies
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
-  // 2. Middleware para leer cookies
   app.use(cookieParser());
 
   app.useGlobalPipes(

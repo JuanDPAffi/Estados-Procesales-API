@@ -124,12 +124,14 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const activationToken = crypto.randomBytes(32).toString('hex');
 
+    const assignedRole = isAffiEmail ? 'admin' : 'user';
+
     // 5. Crear usuario
     const user = await this.userModel.create({
       name,
       email: emailLower,
       password: hashedPassword,
-      role: role || 'user',
+      role: assignedRole,
       nit, 
       codigoInmobiliaria,
       activationToken: activationToken, 

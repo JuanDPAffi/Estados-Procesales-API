@@ -66,24 +66,56 @@ export class RedelexController {
     @Param('id', ParseIntPipe) id: number, 
     @Req() req
   ) {
+    // 1. Obtener datos
     const data = await this.redelexService.getProcesoDetalleById(id);
 
     if (!data) {
       throw new NotFoundException('Proceso no encontrado en Redelex');
     }
 
-    // SEGURIDAD: Si es usuario normal, verificar propiedad
+    // 2. SEGURIDAD: Validación de Propiedad
     if (req.user.role !== 'admin') {
-      const userNit = req.user.nit; // string
+      const userNit = req.user.nit;
       
-      // Buscamos si el NIT del usuario está entre los sujetos del proceso
+      if (!userNit) {
+        throw new ForbiddenException('Su usuario no tiene un NIT configurado.');
+      }
+
+      // Limpiamos NIT usuario (solo números)
+      const cleanUserNit = String(userNit).replace(/[^0-9]/g, '');
+
+      // DEBUG: Ver qué demonios tiene el array de sujetos
+      console.log('🔍 Analizando sujetos del proceso:', id);
+      
+      // Validamos que existan sujetos
+      if (!data.sujetos || !Array.isArray(data.sujetos)) {
+        console.warn('⚠️ Array de sujetos vacío o inválido');
+        throw new ForbiddenException('No es posible verificar la propiedad (Sin sujetos).');
+      }
+
       const esPropio = data.sujetos.some((sujeto: any) => {
-        const identificacion = sujeto.Identificacion ? String(sujeto.Identificacion).trim() : '';
-        return identificacion === userNit;
+        // CORRECCIÓN CLAVE: Buscamos la propiedad correcta (NumeroIdentificacion)
+        // Usamos || para soportar variaciones por si la API cambia
+        const rawId = sujeto.NumeroIdentificacion || sujeto.Identificacion || sujeto.identificacion || '';
+        
+        if (!rawId) {
+            console.log('   ⚠️ Sujeto sin identificación:', sujeto);
+            return false;
+        }
+
+        const cleanIdSujeto = String(rawId).replace(/[^0-9]/g, '');
+        
+        // Debug interno
+        // console.log(`   Comparando: ${cleanUserNit} vs ${cleanIdSujeto}`);
+
+        // Coincidencia flexible (contiene)
+        return cleanIdSujeto.includes(cleanUserNit) || cleanUserNit.includes(cleanIdSujeto);
       });
 
       if (!esPropio) {
-        throw new ForbiddenException('No tiene permisos para ver los detalles de este proceso.');
+        // Imprimimos los sujetos para que veas en consola qué llegó realmente si falla
+        console.error('⛔ Acceso denegado. Los sujetos encontrados fueron:', JSON.stringify(data.sujetos.map(s => s.NumeroIdentificacion || s.Identificacion)));
+        throw new ForbiddenException(`No tiene permisos. Su NIT (${userNit}) no coincide.`);
       }
     }
 

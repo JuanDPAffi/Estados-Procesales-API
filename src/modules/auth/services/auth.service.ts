@@ -110,13 +110,18 @@ export class AuthService {
     // --- LOGICA DE ROLES ---
     const assignedRole = isAffiEmail ? ValidRoles.AFFI : ValidRoles.INMOBILIARIA;
 
+    const nameCapitalized = name
+      .split(' ')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+
     // --- NUEVO: ASIGNACIÓN DE PERMISOS POR DEFECTO ---
     // Buscamos en el mapa qué permisos le tocan a este rol
     const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[assignedRole] || [];
 
     // 5. Crear usuario
     const user = await this.userModel.create({
-      name,
+      name: nameCapitalized,
       email: emailLower,
       password: hashedPassword,
       role: assignedRole,

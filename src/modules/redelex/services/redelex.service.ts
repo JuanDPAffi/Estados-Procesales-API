@@ -390,17 +390,42 @@ export class RedelexService {
       .filter((m: any) => (m.MedidaEfectiva || '').trim().toUpperCase() !== 'N')
       .map((m: any) => this.mapMedidaCautelar(m));
 
-    // Ordenar actuaciones por fecha descendente
     const actuaciones = Array.isArray(p.Actuaciones) ? p.Actuaciones : [];
-    // Usamos slice() para no mutar el array original si se reutiliza
-    const ultimaActuacion =
+
+    // LÓGICA 1: La "Última" para el encabezado (Solo Cuaderno Principal)
+    const ultimaActuacionPrincipal =
       actuaciones.length > 0
-        ? actuaciones.slice().sort((a: any, b: any) => {
-            const fa = new Date(a.FechaActuacion || 0).getTime();
-            const fb = new Date(b.FechaActuacion || 0).getTime();
-            return fb - fa;
-          })[0]
+        ? actuaciones
+            .filter((act: any) => (act.Cuaderno || '').trim() === 'Principal')
+            .sort((a: any, b: any) => {
+              const fa = new Date(a.FechaActuacion || 0).getTime();
+              const fb = new Date(b.FechaActuacion || 0).getTime();
+              return fb - fa;
+            })[0]
         : null;
+    
+    const actuacionesRecientesList = actuaciones
+      .filter((act: any) => {
+        // Normalizamos el texto para evitar errores de mayúsculas/espacios
+        const nombreCuaderno = String(act.Cuaderno || '').toUpperCase().trim();
+        
+        // Verificamos que sea Principal
+        // Usamos INCLUDES por seguridad, por si llega "Cuaderno Principal" o "Principal."
+        return nombreCuaderno.includes('PRINCIPAL');
+      })
+      .sort((a: any, b: any) => {
+        // Orden descendente (más nuevas primero)
+        return new Date(b.FechaActuacion || 0).getTime() - new Date(a.FechaActuacion || 0).getTime();
+      })
+      // TOMAMOS LAS 20 MÁS RECIENTES (en vez de filtrar por fecha)
+      .slice(0, 5) 
+      .map((act: any) => ({
+        fecha: act.FechaActuacion,
+        observacion: act.Observacion,
+        etapa: act.Etapa,
+        tipo: act.Tipo,
+        cuaderno: act.Cuaderno
+      }));
 
     const camposPersonalizados = Array.isArray(p.CamposPersonalizados)
       ? p.CamposPersonalizados
@@ -439,9 +464,10 @@ export class RedelexService {
       sentenciaPrimeraInstanciaResultado: p.SentenciaPrimeraInstancia ?? null,
       sentenciaPrimeraInstanciaFecha: p.FechaSentenciaPrimeraInstancia ?? null,
       medidasCautelares: medidasValidas,
-      ultimaActuacionFecha: ultimaActuacion?.FechaActuacion ?? null,
-      ultimaActuacionTipo: ultimaActuacion?.Tipo ?? null,
-      ultimaActuacionObservacion: ultimaActuacion?.Observacion ?? null,
+      ultimaActuacionFecha: ultimaActuacionPrincipal?.FechaActuacion ?? null,
+      ultimaActuacionTipo: ultimaActuacionPrincipal?.Tipo ?? null,
+      ultimaActuacionObservacion: ultimaActuacionPrincipal?.Observacion ?? null,
+      actuacionesRecientes: actuacionesRecientesList,
       abogados: abogados,
     };
   }

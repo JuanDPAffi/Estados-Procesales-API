@@ -25,6 +25,14 @@ export interface MedidaCautelarDto {
   observaciones: string | null;
 }
 
+export class ActuacionDto {
+  fecha: Date;
+  observacion: string;
+  etapa: string;
+  tipo: string;
+  cuaderno: string;
+}
+
 export interface ProcesoDetalleDto {
   sujetos: any[];
   idProceso: number;
@@ -53,6 +61,7 @@ export interface ProcesoDetalleDto {
   ultimaActuacionFecha: string | null;
   ultimaActuacionTipo: string | null;
   ultimaActuacionObservacion: string | null;
+  actuacionesRecientes?: ActuacionDto[];
   abogados: any[];
 }
 

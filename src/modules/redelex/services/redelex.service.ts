@@ -373,6 +373,9 @@ export class RedelexService {
       medidaEfectiva: medida.MedidaEfectiva ?? null,
       avaluoJudicial: medida.AvaluoJudicial ?? null,
       observaciones: medida.Observaciones ?? null,
+      identificacionSujeto: medida.Identificacion ?? null,
+      area: medida.Area ?? null,
+      fecha: medida.Fecha ?? null,
     };
   }
 

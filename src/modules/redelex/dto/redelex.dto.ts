@@ -17,10 +17,13 @@ export interface ProcesosPorIdentificacionResponse {
 }
 
 export interface MedidaCautelarDto {
-  tipoBien: string | null;
-  sujeto: string | null;
+  fecha: string | null;
   tipoMedida: string | null;
   medidaEfectiva: string | null;
+  sujeto: string | null;
+  tipoBien: string | null;
+  identificacionSujeto: string | null;
+  area: string | null;
   avaluoJudicial: string | null;
   observaciones: string | null;
 }

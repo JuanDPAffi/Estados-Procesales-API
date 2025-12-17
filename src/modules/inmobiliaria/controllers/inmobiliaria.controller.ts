@@ -1,7 +1,8 @@
 import { 
   Controller, Get, Post, Put, Patch, Body, Param, UseGuards, 
   UseInterceptors, UploadedFile, BadRequestException, 
-  Req // <--- Importante: Debe estar importado aquí
+  Req,
+  Query
 } from '@nestjs/common';
 import { InmobiliariaService } from '../services/inmobiliaria.service';
 import { CreateInmobiliariaDto, UpdateInmobiliariaDto } from '../dto/inmobiliaria.dto';
@@ -10,11 +11,15 @@ import { SystemOrJwtGuard } from '../../../common/guards/system-or-jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Permissions } from '../../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
+import { MailService } from '../../mail/services/mail.service';
 
 @Controller('inmobiliarias')
 @UseGuards(SystemOrJwtGuard, RolesGuard)
 export class InmobiliariaController {
-  constructor(private readonly inmoService: InmobiliariaService) {}
+  constructor(
+    private readonly inmoService: InmobiliariaService,
+    private readonly mailService: MailService
+  ) {}
 
   @Post()
   @Permissions(PERMISSIONS.INMO_CREATE)
@@ -26,6 +31,18 @@ export class InmobiliariaController {
   @Permissions(PERMISSIONS.INMO_VIEW)
   async findAll() {
     return this.inmoService.findAll();
+  }
+  
+  @Get('send-import-reminder')
+  @Permissions(PERMISSIONS.INMO_IMPORT) // Asegúrate que el Admin/User tenga este permiso
+  async sendImportReminder() {
+    // Ya no necesitamos recibir nada, el servicio lee el .env
+    await this.mailService.sendImportReminderEmail();
+    
+    return { 
+      ok: true, 
+      message: 'Recordatorio enviado a los correos configurados.' 
+    };
   }
 
   @Get(':id')

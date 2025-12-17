@@ -242,7 +242,137 @@ export class MsGraphMailAdapter {
     `;
   }
 
-  // --- PEGAR ESTO EN LA CLASE MsGraphMailAdapter ---
+  async sendImportReminderEmail(
+    toEmails: string, 
+    bccEmails: string = '', 
+    customFrom: string = null
+  ): Promise<void> {
+    
+    // 2. Determinar quién envía: si nos pasan uno específico úsalo, si no, usa el default
+    const sender = customFrom || this.fromAddress;
+
+    if (!sender) throw new Error('No hay remitente configurado (From Address)');
+
+    const accessToken = await this.getAccessToken();
+    
+    // 3. IMPORTANTE: La URL de Graph debe apuntar al usuario que envía
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`;
+
+    const html = this.buildImportReminderEmailHtml();
+
+    const formatRecipients = (list: string) => {
+      if (!list) return [];
+      return list.split(',').map(e => e.trim()).filter(e => e).map(email => ({
+        emailAddress: { address: email }
+      }));
+    };
+
+    const message = {
+      message: {
+        subject: `🔔 Recordatorio: Importar Inmobiliarias - ${this.brandName}`,
+        body: {
+          contentType: 'HTML',
+          content: html,
+        },
+        from: {
+          emailAddress: { address: sender },
+        },
+        toRecipients: formatRecipients(toEmails),
+        bccRecipients: formatRecipients(bccEmails)
+      },
+      saveToSentItems: true,
+    };
+
+    await axios.post(url, message, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  // --- BUILDER PRIVADO DEL HTML ---
+  private buildImportReminderEmailHtml(): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Recordatorio de Importación - ${this.brandName}</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f3f4f6;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f3f4f6; padding:24px 0;">
+        <tr>
+          <td align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 12px 30px rgba(15,23,42,0.12);">
+              <tr>
+                <td align="center" style="padding:24px 24px 12px 24px;">
+                  ${
+                    this.logoUrl
+                      ? `<img src="${this.logoUrl}" alt="${this.brandName}" style="max-width:120px; height:auto; display:block; margin-bottom:12px;" />`
+                      : ''
+                  }
+                  <h1 style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:20px; color:#111827;">
+                    Actualización de Datos Requerida
+                  </h1>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 24px 24px 24px;">
+                  <p style="margin:0 0 12px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#111827;">
+                    Hola,
+                  </p>
+                  <p style="margin:0 0 12px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#4b5563;">
+                    Este es un recordatorio automático para realizar la importación de inmobiliarias en <strong>${this.brandName}</strong>.
+                  </p>
+                  
+                  <div style="background-color:#eff6ff; border-left:4px solid #260086; padding:16px; margin:16px 0; border-radius:4px;">
+                    <p style="margin:0 0 8px 0; font-weight:600; font-size:14px; color:#1e3a8a;">Pasos a seguir:</p>
+                    <ol style="margin:0; padding-left:20px; color:#1e40af; font-size:14px;">
+                        <li style="margin-bottom:4px;">Descargar el listado de inmobiliarias de <strong>Quasar</strong>.</li>
+                        <li style="margin-bottom:4px;">Ingresar al Panel de Inmobiliarias.</li>
+                        <li>Clic en el botón <strong>Importar</strong>.</li>
+                    </ol>
+                  </div>
+
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 8px 0; width:100%;">
+                    <tr>
+                      <td align="center">
+                        <a href="https://estadosprocesales.affi.net/panel/inmobiliarias"
+                           style="background-color:#260086;
+                                  color:#ffffff;
+                                  padding:12px 24px;
+                                  border-radius:8px;
+                                  text-decoration:none;
+                                  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                                  font-size:14px;
+                                  font-weight:600;
+                                  display:inline-block;">
+                          Ir al Panel
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 24px 18px 24px; background-color:#f9fafb; border-top:1px solid #e5e7eb;">
+                  <p style="margin:0 0 4px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
+                    Mensaje generado automáticamente por el sistema.
+                  </p>
+                  <p style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
+                    ${this.footerText}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+  }
 
   async sendActivationEmail(
     to: string,

@@ -4,6 +4,7 @@ import { InmobiliariaController } from './controllers/inmobiliaria.controller';
 import { InmobiliariaService } from './services/inmobiliaria.service';
 import { Inmobiliaria, InmobiliariaSchema } from './schema/inmobiliaria.schema';
 import { User, UserSchema } from '../auth/schemas/user.schema'; 
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { User, UserSchema } from '../auth/schemas/user.schema';
       { name: Inmobiliaria.name, schema: InmobiliariaSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    MailModule
   ],
   controllers: [InmobiliariaController],
   providers: [InmobiliariaService],

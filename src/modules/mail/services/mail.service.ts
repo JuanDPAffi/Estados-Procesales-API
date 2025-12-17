@@ -1,11 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MsGraphMailAdapter } from '../adapters/ms-graph-mail.adapter';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  constructor(private readonly msGraphMailAdapter: MsGraphMailAdapter) {}
+  constructor(
+    private readonly msGraphMailAdapter: MsGraphMailAdapter,
+    private readonly configService: ConfigService
+  ) {}
+
+  /**
+   * NUEVO: Envía recordatorio para importar inmobiliarias
+   * Se usará desde el endpoint de Power Automate
+   */
+  async sendImportReminderEmail(): Promise<void> {
+    const fromEmail = this.configService.get<string>('MAIL_REMINDER_FROM') || this.configService.get<string>('MAIL_DEFAULT_FROM');
+    const toEmails = this.configService.get<string>('MAIL_REMINDER_TO');
+    const bccEmails = this.configService.get<string>('MAIL_REMINDER_BCC');
+
+    if (!toEmails) {
+      this.logger.warn('No se han configurado destinatarios (MAIL_REMINDER_TO)');
+      return;
+    }
+
+    try {
+      // PASAMOS fromEmail COMO TERCER ARGUMENTO
+      await this.msGraphMailAdapter.sendImportReminderEmail(toEmails, bccEmails, fromEmail);
+
+      this.logger.log(`Recordatorio enviado desde ${fromEmail} a: ${toEmails}`);
+    } catch (error) {
+      this.logger.error('Error enviando recordatorio', error);
+      throw error;
+    }
+  }
 
   /**
    * Envía correo de bienvenida a un nuevo usuario

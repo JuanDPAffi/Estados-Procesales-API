@@ -46,7 +46,7 @@ export class AuthController {
       secure: isProduction,   
       sameSite: isProduction ? 'none' : 'lax', 
       domain: isProduction ? 'affi.net' : undefined, 
-      maxAge: 1000 * 60 * 30, 
+      maxAge: 1000 * 60 * 60, 
     });
 
     return {

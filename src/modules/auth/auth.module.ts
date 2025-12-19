@@ -33,7 +33,7 @@ import { MailModule } from '../mail/mail.module';
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET') || 'default_secret',
         signOptions: {
-          expiresIn: '1h',
+          expiresIn: '1d',
         },
       }),
       inject: [ConfigService],

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { SessionSlidingInterceptor } from './common/interceptors/session-sliding.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,26 +14,28 @@ async function bootstrap() {
   ];
 
   // 2. Configuración de CORS Dinámica
+  // (Esto debe ir ANTES de que el servidor empiece a escuchar)
   app.enableCors({
     origin: (origin, callback) => {
       // Permitir peticiones sin origen (como Postman o llamadas server-to-server)
       if (!origin) return callback(null, true);
       
       if (allowedOrigins.includes(origin)) {
-        // Si el dominio está en la lista blanca, lo dejamos pasar
         callback(null, true);
       } else {
-        // Si no, lo bloqueamos y mostramos quién intentó entrar
         console.log('⛔ Bloqueado por CORS:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true, // Obligatorio para cookies
+    credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
+  // 3. Middlewares Globales
   app.use(cookieParser());
-
+  
+  // 4. Pipes y Prefijos
+  app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -41,8 +44,12 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api');
+  // 5. Interceptors
+  app.useGlobalInterceptors(new SessionSlidingInterceptor());
 
+  // --- ERROR ESTABA AQUI: ELIMINADO EL PRIMER app.listen(4000) ---
+
+  // 6. INICIAR EL SERVIDOR (Una sola vez al final)
   const PORT = process.env.PORT || 4000;
   await app.listen(PORT);
   console.log(`🚀 API Redelex corriendo en puerto ${PORT}`);

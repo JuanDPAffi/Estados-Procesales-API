@@ -26,7 +26,6 @@ export const PasswordResetTokenSchema = SchemaFactory.createForClass(
   PasswordResetToken,
 );
 
-// TTL index: se borra automáticamente después de expirar
 PasswordResetTokenSchema.index(
   { expiresAt: 1 }, 
   { expireAfterSeconds: 0 }

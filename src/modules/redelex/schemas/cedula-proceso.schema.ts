@@ -9,7 +9,6 @@ export class CedulaProceso {
   @Prop({ required: true, index: true })
   procesoId: number;
 
-  // --- Nuevos campos solicitados ---
   @Prop()
   numeroRadicacion: string;
 
@@ -18,7 +17,6 @@ export class CedulaProceso {
 
   @Prop()
   etapaProcesal: string;
-  // --------------------------------
 
   @Prop({ required: true })
   claseProceso: string;

@@ -7,17 +7,13 @@ import { SessionSlidingInterceptor } from './common/interceptors/session-sliding
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 1. DEFINIMOS QUIÉNES TIENEN PERMISO (Lista Blanca)
   const allowedOrigins = [
-    'https://estadosprocesales.affi.net', // Tu web en producción
-    'http://localhost:4200'               // Tu entorno local
+    'https://estadosprocesales.affi.net',
+    'http://localhost:4200'
   ];
 
-  // 2. Configuración de CORS Dinámica
-  // (Esto debe ir ANTES de que el servidor empiece a escuchar)
   app.enableCors({
     origin: (origin, callback) => {
-      // Permitir peticiones sin origen (como Postman o llamadas server-to-server)
       if (!origin) return callback(null, true);
       
       if (allowedOrigins.includes(origin)) {
@@ -31,10 +27,7 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
-  // 3. Middlewares Globales
   app.use(cookieParser());
-  
-  // 4. Pipes y Prefijos
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -44,12 +37,7 @@ async function bootstrap() {
     }),
   );
 
-  // 5. Interceptors
   app.useGlobalInterceptors(new SessionSlidingInterceptor());
-
-  // --- ERROR ESTABA AQUI: ELIMINADO EL PRIMER app.listen(4000) ---
-
-  // 6. INICIAR EL SERVIDOR (Una sola vez al final)
   const PORT = process.env.PORT || 4000;
   await app.listen(PORT);
   console.log(`🚀 API Redelex corriendo en puerto ${PORT}`);

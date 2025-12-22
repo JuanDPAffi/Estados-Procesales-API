@@ -4,9 +4,9 @@ import { DatabaseModule } from './config/database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RedelexModule } from './modules/redelex/redelex.module';
 import { MailModule } from './modules/mail/mail.module';
-import { InmobiliariaModule } from './modules/inmobiliaria/inmobiliaria.module'; // <--- AGREGAR ESTO
+import { InmobiliariaModule } from './modules/inmobiliaria/inmobiliaria.module';
 import { UsersModule } from './modules/users/users.module';
-import { SupportModule } from './modules/support/support.module'; // <--- AGREGAR ESTO
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [

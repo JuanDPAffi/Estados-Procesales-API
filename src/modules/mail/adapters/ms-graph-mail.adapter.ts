@@ -45,7 +45,6 @@ export class MsGraphMailAdapter {
       throw new Error('Credenciales de Microsoft Entra incompletas');
     }
 
-    // Usar token cacheado si sigue vigente
     const now = Date.now();
     if (this.cachedToken && now < this.cachedToken.expiresAt - 60_000) {
       return this.cachedToken.accessToken;
@@ -61,7 +60,7 @@ export class MsGraphMailAdapter {
 
     const resp = await axios.post(tokenUrl, params);
     const accessToken = resp.data.access_token as string;
-    const expiresIn = resp.data.expires_in as number; // segundos
+    const expiresIn = resp.data.expires_in as number;
 
     this.cachedToken = {
       accessToken,
@@ -248,14 +247,12 @@ export class MsGraphMailAdapter {
     customFrom: string = null
   ): Promise<void> {
     
-    // 2. Determinar quién envía: si nos pasan uno específico úsalo, si no, usa el default
     const sender = customFrom || this.fromAddress;
 
     if (!sender) throw new Error('No hay remitente configurado (From Address)');
 
     const accessToken = await this.getAccessToken();
     
-    // 3. IMPORTANTE: La URL de Graph debe apuntar al usuario que envía
     const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`;
 
     const html = this.buildImportReminderEmailHtml();
@@ -291,7 +288,6 @@ export class MsGraphMailAdapter {
     });
   }
 
-  // --- BUILDER PRIVADO DEL HTML ---
   private buildImportReminderEmailHtml(): string {
     return `
     <!DOCTYPE html>

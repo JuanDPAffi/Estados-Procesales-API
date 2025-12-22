@@ -22,7 +22,6 @@ export class RegisterDto {
   @IsOptional()
   role?: string;
 
-  // Nuevos campos para lógica de inmobiliaria
   @IsString()
   @IsOptional()
   nit?: string;
@@ -57,7 +56,6 @@ export class ResetPasswordDto {
   @IsNotEmpty()
   token: string;
 
-  // Aplicamos la misma seguridad al resetear
   @IsString()
   @IsNotEmpty()
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })

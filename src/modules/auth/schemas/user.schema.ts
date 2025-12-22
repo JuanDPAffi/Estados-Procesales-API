@@ -3,7 +3,6 @@ import { Document } from 'mongoose';
 
 export type UserDocument = User & Document;
 
-// Definimos los roles validos para evitar errores de tipeo
 export enum ValidRoles {
   ADMIN = 'admin',
   AFFI = 'affi',
@@ -33,12 +32,9 @@ export class User {
   })
   role: string;
 
-  // NUEVO: Array de permisos granulares para personalización
-  // Esto permite que un 'affi' tenga permisos extra que otros 'affi' no tienen
   @Prop({ type: [String], default: [] })
   permissions: string[];
 
-  // Control de acceso
   @Prop({ default: true })
   isActive: boolean;
 
@@ -51,7 +47,6 @@ export class User {
   @Prop({ select: false })
   activationToken?: string;
 
-  // Datos de empresa 
   @Prop({ required: false, trim: true})
   nombreInmobiliaria?: string;
 

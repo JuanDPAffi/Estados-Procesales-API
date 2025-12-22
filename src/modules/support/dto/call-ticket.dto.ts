@@ -30,7 +30,6 @@ export class CreateCallTicketDto {
   @IsOptional()
   companyName?: string;
 
-  // AGREGADO: Para recibir el ID del propietario de HubSpot
   @IsString()
   @IsOptional()
   gerenteComercial?: string;
@@ -39,13 +38,11 @@ export class CreateCallTicketDto {
   @IsNotEmpty()
   query: string;
 
-  // CORREGIDO: Transforma números a strings automáticamente
   @IsString()
   @IsOptional()
   @Transform(({ value }) => value ? String(value) : value)
   procesoId?: string;
 
-  // CORREGIDO: Renombrado de procesoRadicado a cuenta para coincidir con el Frontend
   @IsString()
   @IsOptional()
   @Transform(({ value }) => value ? String(value) : value)

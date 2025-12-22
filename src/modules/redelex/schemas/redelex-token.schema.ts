@@ -11,7 +11,6 @@ export class RedelexToken {
   @Prop({ required: true })
   expiresAt: Date;
 
-  // Timestamps automáticos
   createdAt?: Date;
   updatedAt?: Date;
 }

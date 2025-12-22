@@ -23,12 +23,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: (req: Request) => {
         let token = null;
         
-        // A. Intenta leer desde la Cookie (Prioridad 1)
         if (req && req.cookies && req.cookies['redelex_token']) {
           token = req.cookies['redelex_token'];
         }
         
-        // B. Si no hay cookie, intenta leer desde el Header (Prioridad 2)
         if (!token) {
           token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
         }

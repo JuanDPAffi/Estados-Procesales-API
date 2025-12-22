@@ -1,6 +1,3 @@
-// LISTA MAESTRA DE PERMISOS
-// Aquí agregas todos los permisos granulares que tu sistema soporte.
-
 import { ValidRoles } from '../../modules/auth/schemas/user.schema';
 
 export const PERMISSIONS = {
@@ -37,7 +34,6 @@ export const PERMISSIONS = {
   SYSTEM_CONFIG: 'system:config', // Acciones del sistema y configuración avanzada
 };
 
-// MAPA DE PERMISOS POR DEFECTO
 export const DEFAULT_ROLE_PERMISSIONS = {
   [ValidRoles.ADMIN]: [], // El Admin no necesita permisos en DB, el Guard le da acceso total.
   
@@ -53,6 +49,4 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   ],
 };
 
-
-// Helper para obtener solo los valores (útil para validaciones front)
 export const ALL_PERMISSIONS_LIST = Object.values(PERMISSIONS);

@@ -5,8 +5,8 @@ import { MsGraphMailAdapter } from './adapters/ms-graph-mail.adapter';
 @Module({
   providers: [
     MailService,
-    MsGraphMailAdapter, // Patrón Adaptador para MS Graph
+    MsGraphMailAdapter,
   ],
-  exports: [MailService], // Exportamos para usar en otros módulos
+  exports: [MailService],
 })
 export class MailModule {}

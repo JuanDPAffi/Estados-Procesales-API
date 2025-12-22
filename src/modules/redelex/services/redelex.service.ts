@@ -3,23 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import axios from 'axios';
-import {
-  RedelexToken,
-  RedelexTokenDocument,
-} from '../schemas/redelex-token.schema';
-import {
-  CedulaProceso,
-  CedulaProcesoDocument,
-} from '../schemas/cedula-proceso.schema';
-import {
-  ProcesoDetalleDto,
-  ProcesoResumenDto,
-  ProcesosPorIdentificacionResponse,
-  InformeCedulaItem,
-  MedidaCautelarDto,
-  InformeInmobiliariaRaw,
-  InformeInmobiliariaDto,
-} from '../dto/redelex.dto';
+import { RedelexToken, RedelexTokenDocument } from '../schemas/redelex-token.schema';
+import { CedulaProceso, CedulaProcesoDocument } from '../schemas/cedula-proceso.schema';
+import { ProcesoDetalleDto, ProcesoResumenDto, ProcesosPorIdentificacionResponse, InformeCedulaItem, MedidaCautelarDto, InformeInmobiliariaRaw, InformeInmobiliariaDto } from '../dto/redelex.dto';
 
 @Injectable()
 export class RedelexService {
@@ -27,11 +13,7 @@ export class RedelexService {
   private readonly baseUrl = 'https://cloudapp.redelex.com/api';
   private readonly apiKey: string;
   private readonly INFORME_MIS_PROCESOS_ID = 5632;
-
-  // NUEVO: ID de licencia para pasar el WAF
   private readonly licenseId = '2117C477-209F-44F5-9587-783D9F25BA8B';
-
-  // OPTIMIZACIÓN 1: Variable para manejar la promesa de refresco y evitar race conditions
   private tokenRefreshPromise: Promise<string> | null = null;
 
   constructor(
@@ -50,8 +32,6 @@ export class RedelexService {
   async getMisProcesosLive(userNit: string) {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
-    // 1. Descargamos el JSON completo del informe 5632
-    // No guardamos en BD, solo lo traemos a memoria RAM
     const data = await this.secureRedelexGet(
       `${this.baseUrl}/Informes/GetInformeJson`,
       { token: this.apiKey, informeId: this.INFORME_MIS_PROCESOS_ID },
@@ -61,30 +41,18 @@ export class RedelexService {
     if (!rawString) return { success: true, identificacion: userNit, procesos: [] };
 
     const items = JSON.parse(rawString) as any[];
-
-    // 2. FILTRADO EN MEMORIA
-    // Buscamos solo los registros donde el Demandante (Inmobiliaria) coincida con el NIT del usuario
     const nitBusqueda = userNit.trim();
-    
     const misProcesos = items.filter((item) => {
-      // El informe trae ej: "805000082-4", tu usuario tiene "805000082"
-      // Usamos includes para que coincida aunque tenga dígito de verificación
       const nitInforme = String(item['Demandante - Identificacion'] || '');
       return nitInforme.includes(nitBusqueda);
     });
 
-    // 3. MAPEO PARA EL FRONTEND
-    // Convertimos las llaves del JSON de Redelex a lo que espera tu tabla Angular
     const procesosMapeados = misProcesos.map((item) => ({
       procesoId: item['ID Proceso'],
       claseProceso: String(item['Clase Proceso'] ?? '').trim(),
-      
-      // Limpiamos la comilla simple del radicado ('68001...)
       numeroRadicacion: String(item['Numero Radicacion'] ?? '').replace(/'/g, '').trim(),
-      
       demandadoNombre: String(item['Demandado - Nombre'] ?? '').trim(),
       demandadoIdentificacion: String(item['Demandado - Identificacion'] ?? '').trim(),
-      
       demandanteNombre: String(item['Demandante - Nombre'] ?? '').trim(),
       demandanteIdentificacion: String(item['Demandante - Identificacion'] ?? '').trim(),
       fechaRecepcionProceso: String(item['Fecha Recepcion Proceso'] ?? '').trim(),
@@ -103,7 +71,6 @@ export class RedelexService {
   }
 
   async getValidAuthToken(): Promise<string> {
-    // Si ya hay una renovación en curso, devolvemos esa promesa para que todos esperen
     if (this.tokenRefreshPromise) {
       return this.tokenRefreshPromise;
     }
@@ -112,7 +79,6 @@ export class RedelexService {
       .findOne()
       .sort({ createdAt: -1 });
 
-    // Margen de seguridad de 60 segundos para considerar el token expirado antes de tiempo
     if (!tokenDoc || new Date(Date.now() + 60000) > tokenDoc.expiresAt) {
       return await this.handleTokenRefresh();
     }
@@ -120,12 +86,11 @@ export class RedelexService {
     return tokenDoc.token;
   }
 
-  // Wrapper para gestionar la promesa de refresco
   private async handleTokenRefresh(): Promise<string> {
     if (this.tokenRefreshPromise) return this.tokenRefreshPromise;
 
     this.tokenRefreshPromise = this.generateAndStoreToken().finally(() => {
-      this.tokenRefreshPromise = null; // Limpiamos la promesa al terminar (éxito o error)
+      this.tokenRefreshPromise = null;
     });
 
     return this.tokenRefreshPromise;
@@ -138,7 +103,6 @@ export class RedelexService {
 
     this.logger.log('Generando nuevo token de Redelex...');
 
-    // MODIFICADO: Se agrega header api-license-id
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
@@ -163,7 +127,6 @@ export class RedelexService {
   async secureRedelexGet(url: string, params: any = {}) {
     let token = await this.getValidAuthToken();
 
-    // MODIFICADO: Objeto de headers unificado con la licencia
     const headers = {
       Authorization: token,
       'api-license-id': this.licenseId,
@@ -179,10 +142,7 @@ export class RedelexService {
     } catch (err: any) {
       if (err.response?.status === 401) {
         this.logger.warn('Token expirado (401), forzando regeneración...');
-        // Forzamos regeneración
         token = await this.handleTokenRefresh();
-
-        // Actualizamos el token en los headers para el reintento
         headers.Authorization = token;
 
         return (
@@ -258,14 +218,12 @@ export class RedelexService {
     const items = JSON.parse(raw) as InformeCedulaItem[];
     this.logger.log(`Informe descargado. Registros crudos: ${items.length}`);
 
-    // PASO 1: Agrupar en memoria por ID Proceso
     const procesosMap = new Map<number, any>();
 
     for (const item of items) {
       const pId = Math.round(item['ID Proceso']);
       const rol = String(item['Sujeto Intervencion'] ?? '').toUpperCase().trim();
 
-      // Si no existe en el mapa, lo inicializamos con datos generales
       if (!procesosMap.has(pId)) {
         procesosMap.set(pId, {
           procesoId: pId,
@@ -273,7 +231,6 @@ export class RedelexService {
           codigoAlterno: String(item['Codigo Alterno'] ?? '').trim(),
           claseProceso: String(item['Clase Proceso'] ?? '').trim(),
           etapaProcesal: String(item['Etapa Procesal'] ?? '').trim(),
-          // Inicializamos vacíos, se llenarán según el rol
           demandadoNombre: '',
           demandadoIdentificacion: '',
           demandanteNombre: '',
@@ -281,10 +238,8 @@ export class RedelexService {
         });
       }
 
-      // Obtenemos la referencia al objeto agrupado
       const proceso = procesosMap.get(pId);
 
-      // PASO 2: Llenar datos según el rol del sujeto en esta fila
       if (rol === 'DEMANDANTE') {
         proceso.demandanteNombre = String(item['Sujeto Nombre'] ?? '').trim();
         proceso.demandanteIdentificacion = String(item['Sujeto Identificacion'] ?? '').trim();
@@ -293,10 +248,8 @@ export class RedelexService {
         proceso.demandadoNombre = String(item['Sujeto Nombre'] ?? '').trim();
         proceso.demandadoIdentificacion = String(item['Sujeto Identificacion'] ?? '').trim();
       }
-      // Nota: Si hay "DEUDOR SOLIDARIO", lo ignoramos o podrías asignarlo a demandado si prefieres.
     }
 
-    // Convertimos el mapa a array para procesarlo
     const procesosUnicos = Array.from(procesosMap.values());
     const total = procesosUnicos.length;
     this.logger.log(`Procesos únicos consolidados: ${total}`);
@@ -305,14 +258,13 @@ export class RedelexService {
     let modified = 0;
     const BATCH_SIZE = 1000;
 
-    // PASO 3: Guardar en Mongo por lotes
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const chunk = procesosUnicos.slice(i, i + BATCH_SIZE);
       
       const bulkOps = chunk.map((p) => ({
         updateOne: {
           filter: { procesoId: p.procesoId },
-          update: { $set: p }, // Guardamos el objeto ya consolidado
+          update: { $set: p },
           upsert: true,
         },
       }));
@@ -326,7 +278,6 @@ export class RedelexService {
       }
     }
 
-    // PASO 4: Limpieza (Opcional - Eliminar los que ya no vienen en el informe)
     const idsProcesados = Array.from(procesosMap.keys());
     const deleteResult = await this.cedulaProcesoModel.deleteMany({
       procesoId: { $nin: idsProcesados },
@@ -344,10 +295,7 @@ export class RedelexService {
     identificacion: string,
   ): Promise<ProcesosPorIdentificacionResponse> {
     const value = identificacion.trim();
-    // Escapamos caracteres especiales para evitar inyecciones de Regex
     const pattern = this.escapeRegex(value);
-
-    // Búsqueda insensible a mayúsculas/minúsculas
     const docs = await this.cedulaProcesoModel
       .find({
         $or: [
@@ -410,8 +358,6 @@ export class RedelexService {
       .map((m: any) => this.mapMedidaCautelar(m));
 
     const actuaciones = Array.isArray(p.Actuaciones) ? p.Actuaciones : [];
-
-    // LÓGICA 1: La "Última" para el encabezado (Solo Cuaderno Principal)
     const ultimaActuacionPrincipal =
       actuaciones.length > 0
         ? actuaciones
@@ -432,7 +378,6 @@ export class RedelexService {
         return new Date(b.FechaActuacion || 0).getTime() - new Date(a.FechaActuacion || 0).getTime();
       })
       .map((act: any) => ({
-        // Generamos un ID único desde el origen para evitar errores de tipado
         id: act.ActuacionId ? String(act.ActuacionId) : `act-${Math.random().toString(36).substr(2, 9)}`, 
         fecha: act.FechaActuacion,
         observacion: act.Observacion,

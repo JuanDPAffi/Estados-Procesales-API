@@ -13,30 +13,26 @@ export class SupportController {
 
   @Post('ticket')
   async createTicket(@Req() req, @Body() createDto: CreateTicketDto) {
-    // Extraemos todos los datos necesarios del JWT/Request
     const { email, name, nit, role } = req.user;
     
     return this.supportService.createTicket(
-      { email, name, nit, role }, // Pasamos el objeto usuario completo
+      { email, name, nit, role },
       createDto
     );
   }
 
-  // Autocompletado Contacto
   @Get('hubspot/search-contact')
   @Permissions(PERMISSIONS.CALL_CREATE)
   async searchContact(@Query('email') email: string) {
     return this.supportService.searchHubSpotContact(email);
   }
 
-  // Autocompletado Empresa
   @Get('hubspot/search-company')
   @Permissions(PERMISSIONS.CALL_CREATE)
   async searchCompany(@Query('nit') nit: string) {
     return this.supportService.searchHubSpotCompany(nit);
   }
 
-  // Crear Ticket de Llamada
   @Post('call-ticket')
   @Permissions(PERMISSIONS.CALL_CREATE)
   async createCallTicket(@Body() dto: CreateCallTicketDto, @Req() req: any) {

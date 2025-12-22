@@ -1,6 +1,3 @@
-// ... (Mantén tus interfaces anteriores ProcesoResumenDto, etc.)
-
-// Tipos de respuesta de Redelex existentes...
 export interface ProcesoResumenDto {
   procesoId: number;
   demandadoNombre: string;
@@ -83,9 +80,6 @@ export type InformeCedulaItem = {
   'Etapa Procesal': string;
 };
 
-// --- NUEVAS INTERFACES PARA INMOBILIAR ---
-
-// 1. Estructura RAW (Como viene de Redelex con espacios y mayúsculas)
 export interface InformeInmobiliariaRaw {
   'ID Proceso': number;
   'Demandado - Identificacion': string;
@@ -101,7 +95,6 @@ export interface InformeInmobiliariaRaw {
   'CIUDAD DEL INMUEBLE': string | null;
 }
 
-// 2. Estructura DTO (Limpia para tu Frontend)
 export interface InformeInmobiliariaDto {
   idProceso: number;
   claseProceso: string,

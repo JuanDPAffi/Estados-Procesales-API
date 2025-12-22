@@ -15,7 +15,6 @@ export class InmobiliariaService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
-  // ... (create, findAll, findOne, update, toggleStatus se mantienen IGUALES) ...
   async create(createDto: CreateInmobiliariaDto) {
     const existing = await this.inmoModel.findOne({ nit: createDto.nit, codigo: createDto.codigo });
     if (existing) throw new ConflictException('Ya existe una inmobiliaria con ese NIT y Código');
@@ -61,7 +60,6 @@ export class InmobiliariaService {
     await this.userModel.updateMany({ nit: nit }, { $set: { isActive: isActive } });
   }
 
-  // --- LÓGICA DE IMPORTACIÓN ACTUALIZADA ---
   async importInmobiliarias(file: Express.Multer.File, userEmail: string = 'Sistema') {
     const workbook = xlsx.read(file.buffer, { type: 'buffer', cellDates: true });
     const sheetName = workbook.SheetNames[0];
@@ -71,13 +69,10 @@ export class InmobiliariaService {
       throw new BadRequestException('El archivo Excel está vacío o no tiene formato válido');
     }
 
-    // 1. DEDUPLICACIÓN EN MEMORIA (Solo agarramos el primero por NIT)
     const uniqueRawData = new Map<string, any>();
 
     rawData.forEach((row: any) => {
       const nit = String(row['Nit'] || row['NIT'] || '').trim();
-      // Si el NIT existe y no lo hemos procesado aún, lo guardamos.
-      // Si ya existe en el mapa, lo ignoramos (esto elimina los duplicados de oficinas).
       if (nit && !uniqueRawData.has(nit)) {
         uniqueRawData.set(nit, row);
       }
@@ -85,11 +80,9 @@ export class InmobiliariaService {
 
     const uniqueRows = Array.from(uniqueRawData.values());
 
-    // 2. MAPEO DE COLUMNAS SEGÚN TU EXCEL
     const excelInmos = uniqueRows.map((row: any) => {
-      // Determinamos si está activa según la columna del Excel
       const estadoExcel = String(row['Estado Inmobiliaria'] || '').trim();
-      const isActiveRow = estadoExcel === 'Activa'; // Solo es true si dice "Activa"
+      const isActiveRow = estadoExcel === 'Activa';
 
       return {
         nit: String(row['Nit'] || row['NIT'] || '').trim(),
@@ -102,7 +95,7 @@ export class InmobiliariaService {
         emailContacto: String(row['Email'] || row['EMAIL'] || '').trim().toLowerCase(), 
         isActive: isActiveRow 
       };
-    }).filter(item => item.nit && item.codigo); // Filtro final de seguridad
+    }).filter(item => item.nit && item.codigo);
 
     if (excelInmos.length === 0) throw new BadRequestException('No se encontraron registros válidos.');
 
@@ -117,9 +110,7 @@ export class InmobiliariaService {
     const inmoOperations = [];
     const nitsToUpdateUsers: { nit: string, isActive: boolean }[] = [];
 
-    // 3. PROCESAR EXCEL (CREAR O ACTUALIZAR)
     for (const item of excelInmos) {
-        // Preparamos operación DB
         inmoOperations.push({
           updateOne: {
             filter: { nit: item.nit },
@@ -132,9 +123,7 @@ export class InmobiliariaService {
                 ciudad: item.ciudad,
                 telefono: item.telefono,
                 emailContacto: item.emailContacto,
-                isActive: item.isActive, // <--- Aquí usamos el estado calculado del Excel ("Activa" o no)
-                
-                // Auditoría
+                isActive: item.isActive,
                 modifiedBy: userEmail,
                 modificationSource: 'Importación Excel'
               },
@@ -144,7 +133,6 @@ export class InmobiliariaService {
           }
         });
 
-        // Guardamos el NIT y el estado para sincronizar usuarios luego
         nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
 
         if (currentNitsMap.has(item.nit)) {
@@ -154,11 +142,10 @@ export class InmobiliariaService {
         }
     }
 
-    // 4. INACTIVAR LOS QUE NO ESTÁN EN EL EXCEL
     const nitsToDeactivate = Array.from(currentNitsMap).filter(nit => {
-      if (excelNits.has(nit)) return false; // Está en el Excel, ya lo procesamos arriba
+      if (excelNits.has(nit)) return false;
       if (this.PROTECTED_NITS.includes(nit)) return false; 
-      return true; // No está, inactivar
+      return true;
     });
     
     if (nitsToDeactivate.length > 0) {
@@ -167,7 +154,7 @@ export class InmobiliariaService {
           filter: { nit: { $in: nitsToDeactivate } },
           update: { 
             $set: { 
-              isActive: false, // Inactivamos porque ya no viene en el archivo
+              isActive: false,
               modifiedBy: userEmail,
               modificationSource: 'Inactivación Masiva por Excel'
             } 
@@ -176,17 +163,13 @@ export class InmobiliariaService {
       });
       deactivated = nitsToDeactivate.length;
       
-      // Agregamos a la lista de sincronización de usuarios
       nitsToDeactivate.forEach(nit => nitsToUpdateUsers.push({ nit, isActive: false }));
     }
 
-    // 5. EJECUTAR OPERACIONES DB
     if (inmoOperations.length > 0) {
       await this.inmoModel.bulkWrite(inmoOperations);
     }
 
-    // 6. SINCRONIZAR USUARIOS (Lógica optimizada)
-    // Separamos en dos grupos para hacer solo 2 consultas grandes en vez de una por una
     const nitsToActivate = nitsToUpdateUsers.filter(x => x.isActive).map(x => x.nit);
     const nitsToBlock = nitsToUpdateUsers.filter(x => !x.isActive).map(x => x.nit);
 
@@ -201,7 +184,7 @@ export class InmobiliariaService {
     return {
       message: 'Sincronización completada',
       resumen: {
-        procesados_excel: excelInmos.length, // Cantidad ÚNICA (sin duplicados)
+        procesados_excel: excelInmos.length,
         nuevos: created,
         actualizados: updated,
         inactivados: deactivated 

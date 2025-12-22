@@ -1,33 +1,14 @@
-import { 
-  Controller, 
-  Post, 
-  Get, 
-  Body, 
-  HttpCode, 
-  HttpStatus, 
-  Res, 
-  Req, 
-  UseGuards // <--- Importante
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, HttpStatus, Res, Req, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from '../services/auth.service';
-import {
-  RegisterDto,
-  LoginDto,
-  RequestPasswordResetDto,
-  ResetPasswordDto,
-} from '../dto/auth.dto';
-// 1. IMPORTAMOS TU NUEVO GUARD HÍBRIDO
+import { RegisterDto, LoginDto, RequestPasswordResetDto, ResetPasswordDto } from '../dto/auth.dto';
 import { SystemOrJwtGuard } from '../../../common/guards/system-or-jwt.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ============================================================
   // ENDPOINTS PÚBLICOS (NO LLEVAN GUARD)
-  // ============================================================
-
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto) {
@@ -88,19 +69,10 @@ export class AuthController {
     return this.authService.resetPassword(resetDto);
   }
 
-  // ============================================================
   // ENDPOINTS PROTEGIDOS (AQUÍ APLICAMOS EL GUARD)
-  // ============================================================
-
-  /**
-   * Este endpoint ahora responderá si:
-   * 1. Viene un usuario normal con Cookie/JWT.
-   * 2. Viene el SYSTEM_TASK_TOKEN en el header Authorization.
-   */
   @UseGuards(SystemOrJwtGuard)
   @Get('profile')
   getProfile(@Req() req) {
-    // Si entras con System Token, recuerda que req.user será el usuario "falso" Admin
     return req.user; 
   }
 }

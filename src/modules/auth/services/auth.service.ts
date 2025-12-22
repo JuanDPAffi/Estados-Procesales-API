@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  ConflictException,
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -12,18 +7,9 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { User, UserDocument, ValidRoles } from '../schemas/user.schema';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../../common/constants/permissions.constant';
-
-import {
-  PasswordResetToken,
-  PasswordResetTokenDocument,
-} from '../schemas/password-reset-token.schema';
+import { PasswordResetToken, PasswordResetTokenDocument } from '../schemas/password-reset-token.schema';
 import { MailService } from '../../mail/services/mail.service';
-import {
-  RegisterDto,
-  LoginDto,
-  RequestPasswordResetDto,
-  ResetPasswordDto,
-} from '../dto/auth.dto';
+import { RegisterDto, LoginDto, RequestPasswordResetDto, ResetPasswordDto } from '../dto/auth.dto';
 import { Inmobiliaria, InmobiliariaDocument } from '../../inmobiliaria/schema/inmobiliaria.schema';
 
 @Injectable()
@@ -53,19 +39,15 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const { name, email, password, role, nit, codigoInmobiliaria } = registerDto;
-
-    // 1. Verificar existencia del usuario
     const existingUser = await this.userModel.findOne({
       email: email.toLowerCase(),
     });
     if (existingUser) throw new ConflictException('El email ya está registrado');
 
-    // 2. Validar datos obligatorios
     if (!nit || !codigoInmobiliaria) {
       throw new BadRequestException('NIT y Código de Inmobiliaria son obligatorios');
     }
 
-    // 3. Buscar la inmobiliaria
     const inmobiliaria = await this.inmobiliariaModel.findOne({
       nit: nit,
       codigo: codigoInmobiliaria,
@@ -78,17 +60,14 @@ export class AuthService {
       throw new UnauthorizedException('Esta inmobiliaria se encuentra inactiva');
     }
 
-    // Normalizamos el email
     const emailLower = email.toLowerCase();
     const isAffiEmail = emailLower.endsWith('@affi.net');
     const isAffiCorporate = (nit === '900053370' && codigoInmobiliaria === 'AFFI');
 
-    // REGLA 1: PROTECCIÓN CORPORATIVA
     if (isAffiCorporate && !isAffiEmail) {
       throw new UnauthorizedException('Restringido: El código AFFI solo puede ser usado por correos corporativos @affi.net');
     }
 
-    // REGLA 2: ASIGNACIÓN DE PROPIEDAD
     if (!isAffiCorporate) {
       if (inmobiliaria.emailRegistrado) {
         if (inmobiliaria.emailRegistrado !== emailLower) {
@@ -100,22 +79,15 @@ export class AuthService {
       }
     }
 
-    // 4. Hash password y Token
     const hashedPassword = await bcrypt.hash(password, 10);
     const activationToken = crypto.randomBytes(32).toString('hex');
-
-    // --- LOGICA DE ROLES ---
     const assignedRole = isAffiEmail ? ValidRoles.AFFI : ValidRoles.INMOBILIARIA;
-
     const nameCapitalized = name
       .split(' ')
       .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ');
 
-    // --- ASIGNACIÓN DE PERMISOS POR DEFECTO ---
     const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[assignedRole] || [];
-
-    // 5. Crear usuario
     const user = await this.userModel.create({
       name: nameCapitalized,
       email: emailLower,
@@ -151,18 +123,14 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Validaciones de estado
     if (!user.isVerified) {
       throw new UnauthorizedException('Debes activar tu cuenta. Revisa tu correo electrónico.');
     }
 
-    // --- INICIO CORRECCIÓN LOGIN ---
     if (!user.isActive) {
-      // 1. Verificamos si es por culpa de la Inmobiliaria
       if (user.nit) {
         const inmobiliaria = await this.inmobiliariaModel.findOne({ nit: user.nit });
         
-        // Si la inmobiliaria existe y está inactiva, bloqueamos con mensaje específico
         if (inmobiliaria && !inmobiliaria.isActive) {
           throw new UnauthorizedException(
             'Acceso denegado: La inmobiliaria asociada a esta cuenta se encuentra inactiva. Contacte al administrador.'
@@ -170,14 +138,11 @@ export class AuthService {
         }
       }
 
-      // 2. Si la inmobiliaria está bien (o no tiene), entonces SÍ es bloqueo por intentos
       throw new UnauthorizedException(
         'Hemos desactivado tu cuenta por seguridad (múltiples intentos fallidos). Restablece tu contraseña para habilitarla nuevamente.'
       );
     }
-    // --- FIN CORRECCIÓN LOGIN ---
 
-    // Verificar Contraseña
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -197,7 +162,6 @@ export class AuthService {
       }
     }
 
-    // Login Exitoso
     if (user.loginAttempts > 0) {
       user.loginAttempts = 0;
       await user.save();
@@ -271,20 +235,17 @@ export class AuthService {
     user.password = await bcrypt.hash(password, 10);
     user.loginAttempts = 0; 
 
-    // --- INICIO CORRECCIÓN RESET PASSWORD ---
     let shouldActivate = true;
 
     if (user.nit) {
       const inmobiliaria = await this.inmobiliariaModel.findOne({ nit: user.nit });
       
-      // Si la inmobiliaria existe y está inactiva, mantenemos al usuario inactivo
       if (inmobiliaria && !inmobiliaria.isActive) {
         shouldActivate = false;
       }
     }
-
+    
     user.isActive = shouldActivate;
-    // --- FIN CORRECCIÓN RESET PASSWORD ---
 
     await user.save();
     await this.passwordResetTokenModel.deleteMany({ userId: user._id });

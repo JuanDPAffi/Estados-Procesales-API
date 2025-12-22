@@ -5,7 +5,6 @@ export class UpdateUserDto {
   @IsOptional()
   name?: string;
 
-  // El email normalmente no se edita por seguridad, pero si quieres permitirlo:
   @IsEmail()
   @IsOptional()
   email?: string;

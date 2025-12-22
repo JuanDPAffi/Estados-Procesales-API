@@ -9,11 +9,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { SystemOrJwtGuard } from '../../common/guards/system-or-jwt.guard';
 import { User, UserSchema } from './schemas/user.schema';
-import {
-  PasswordResetToken,
-  PasswordResetTokenSchema,
-} from './schemas/password-reset-token.schema';
-import { Inmobiliaria, InmobiliariaSchema } from '../../modules/inmobiliaria/schema/inmobiliaria.schema'; // Ajusta la ruta si es necesario
+import { PasswordResetToken, PasswordResetTokenSchema } from './schemas/password-reset-token.schema';
+import { Inmobiliaria, InmobiliariaSchema } from '../../modules/inmobiliaria/schema/inmobiliaria.schema';
 import { MailModule } from '../mail/mail.module';
 
 @Module({
@@ -21,8 +18,6 @@ import { MailModule } from '../mail/mail.module';
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: PasswordResetToken.name, schema: PasswordResetTokenSchema },
-      // 2. REGISTRAMOS EL SCHEMA DE INMOBILIARIA
-      // Esto es obligatorio porque AuthService usa @InjectModel(Inmobiliaria.name)
       { name: Inmobiliaria.name, schema: InmobiliariaSchema },
     ]),
 
@@ -46,15 +41,13 @@ import { MailModule } from '../mail/mail.module';
     AuthService, 
     JwtStrategy, 
     JwtAuthGuard, 
-    // 3. REGISTRAMOS EL SYSTEM GUARD
-    // Al ponerlo aquí, Nest puede inyectarle ConfigService correctamente
     SystemOrJwtGuard 
   ],
   exports: [
     PassportModule, 
     JwtModule, 
     JwtAuthGuard,
-    SystemOrJwtGuard // Exportamos para que otros módulos puedan usarlo
+    SystemOrJwtGuard
   ],
 })
 export class AuthModule {}

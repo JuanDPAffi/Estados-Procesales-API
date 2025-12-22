@@ -29,8 +29,6 @@ export class SupportService {
     };
   }
 
-  // --- 1. BÚSQUEDA PARA AUTOCOMPLETADO (Front) ---
-
   async searchHubSpotCompany(nit: string) {
     const searchPayload = {
       filterGroups: [{ filters: [{ propertyName: 'numero_de_identificacion', operator: 'EQ', value: nit }] }],
@@ -43,7 +41,6 @@ export class SupportService {
     };
 
     try {
-      // 1. Buscar la empresa
       const response = await axios.post(`${this.hubspotBaseUrl}/companies/search`, searchPayload, { headers: this.getHeaders() });
       
       if (response.data.total > 0) {
@@ -51,10 +48,8 @@ export class SupportService {
         const ownerId = company.properties.hubspot_owner_id;
         let ownerName = '';
 
-        // 2. Si tiene owner, buscamos su nombre (NUEVO)
         if (ownerId) {
           try {
-            // Nota: La API de Owners es diferente a la de Objects, usamos la URL raíz de CRM
             const ownerUrl = 'https://api.hubapi.com/crm/v3/owners'; 
             const ownerResp = await axios.get(`${ownerUrl}/${ownerId}`, { headers: this.getHeaders() });
             const { firstName, lastName } = ownerResp.data;
@@ -70,9 +65,8 @@ export class SupportService {
           id: company.id, 
           name: company.properties.name, 
           nit: company.properties.numero_de_identificacion,
-          // Devolvemos ambos datos:
-          ownerId: ownerId,      // El ID (para crear el ticket luego)
-          ownerName: ownerName   // El Nombre (para mostrar en el front)
+          ownerId: ownerId,
+          ownerName: ownerName
         };
       }
       return { found: false };
@@ -108,13 +102,8 @@ export class SupportService {
     }
   }
 
-  // --- 2. CREACIÓN DEL TICKET DE LLAMADA ---
   async createCallTicket(dto: CreateCallTicketDto, userEmail: string) {
-    const headers = this.getHeaders(); // Usamos el helper para obtener headers
-
-    // 1. Resolver IDs
-    // Nota: findContactId y findCompanyId son métodos privados que tienes más abajo en tu archivo.
-    // Asegúrate de que estén definidos (en tu archivo original lo estaban).
+    const headers = this.getHeaders();
     const contactId = await this.findContactId(dto.contactEmail, headers);
     
     let companyId = null;
@@ -122,7 +111,6 @@ export class SupportService {
        companyId = await this.findCompanyId(dto.companyNit, dto.contactEmail, headers);
     }
 
-    // 2. Asociaciones
     const associations = [];
     if (contactId) {
       associations.push({
@@ -138,8 +126,6 @@ export class SupportService {
     }
 
     const subject = `Llamada Estados Procesales - ${dto.contactName || 'Desconocido'}`;
-
-    // 3. Payload
     const ticketData = {
       properties: {
         subject: subject,
@@ -167,18 +153,14 @@ export class SupportService {
         message: 'Ticket de llamada creado correctamente' 
       };
     } catch (error) {
-      // CAPTURAR EL ERROR REAL DE HUBSPOT
       const hubspotError = error?.response?.data;
       this.logger.error('Error creando ticket de llamada', hubspotError || error.message);
-      
-      // Lanzamos BadRequest con el mensaje específico de HubSpot para verlo en el Front
       throw new BadRequestException(
         hubspotError?.message || 'Error de validación en HubSpot (Revisa logs)'
       );
     }
   }
 
-  // --- 3. CREACIÓN DEL TICKET DE SOPORTE TÉCNICO ---
   async createTicket(user: UserContext, dto: CreateTicketDto) {
     const token = this.configService.get<string>('HUBSPOT_ACCESS_TOKEN');
     
@@ -192,9 +174,7 @@ export class SupportService {
       'Content-Type': 'application/json',
     };
 
-    // 1. BUSCAR CONTACTO Y EMPRESA (Lógica existente)
     const contactId = await this.findContactId(user.email, headers);
-
     let companyId = null;
     const isAffi = user.role?.toLowerCase() === 'affi' || user.nit === '900053370';
     
@@ -202,7 +182,6 @@ export class SupportService {
       companyId = await this.findCompanyId(user.nit, user.email, headers);
     }
 
-    // 2. PREPARAR ASOCIACIONES
     const associations = [];
     if (contactId) {
       associations.push({
@@ -217,12 +196,9 @@ export class SupportService {
       });
     }
 
-    // 3. CONSTRUIR CONTENIDO INTELIGENTE (Nueva Lógica)
     let headerInfo = '';
     
-    // CASO A: TICKET DE PROCESO (Viene con metadata)
     if (dto.metadata) {
-      // Prefijo automático si no lo trae
       if (!dto.subject.startsWith('[APOYO JURÍDICO]')) {
         dto.subject = `[APOYO JURÍDICO] ${dto.subject}`;
       }
@@ -238,7 +214,6 @@ Clase: ${dto.metadata.clase || 'N/A'}
 Etapa Actual: ${dto.metadata.etapa || 'N/A'}
       `;
     } 
-    // CASO B: TICKET DE SOPORTE TÉCNICO (Sin metadata)
     else {
       if (!dto.subject.startsWith('[SOPORTE]')) {
         dto.subject = `[SOPORTE] ${dto.subject}`;
@@ -251,7 +226,6 @@ SOPORTE TÉCNICO - PLATAFORMA
       `;
     }
 
-    // Información del Usuario (Común para ambos)
     const userInfo = `
 Usuario: ${user.name}
 Email: ${user.email}
@@ -260,7 +234,6 @@ NIT: ${user.nit || 'N/A'}
 --------------------------------
     `;
 
-    // Ensamblar cuerpo final
     const finalContent = `
 ${headerInfo}
 ${userInfo}
@@ -269,7 +242,6 @@ MENSAJE DEL USUARIO:
 ${dto.content}
     `.trim();
 
-    // 4. CREAR TICKET EN HUBSPOT
     const ticketData = {
       properties: {
         hs_pipeline: '0',
@@ -294,8 +266,6 @@ ${dto.content}
       throw new InternalServerErrorException('No se pudo crear el ticket de soporte');
     }
   }
-
-  // --- MÉTODOS DE BÚSQUEDA (Sin cambios) ---
 
   private async findContactId(email: string, headers: any): Promise<string | null> {
     const searchPayload = {

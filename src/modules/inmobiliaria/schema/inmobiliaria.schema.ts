@@ -3,9 +3,9 @@ import { Document } from 'mongoose';
 
 export type InmobiliariaDocument = Inmobiliaria & Document;
 
-@Schema({ timestamps: true }) // timestamps: true ya nos da createdAt y updatedAt
+@Schema({ timestamps: true })
 export class Inmobiliaria {
-  // ... (Tus campos existentes: nombre, nit, codigo, etc.) ...
+
   @Prop({ required: true, trim: true})
   nombreInmobiliaria: string;
 
@@ -36,12 +36,11 @@ export class Inmobiliaria {
   @Prop({ trim: true, default: '', lowercase: true })
   emailContacto: string;
 
-  // --- NUEVOS CAMPOS DE AUDITORÍA ---
   @Prop({ trim: true })
-  modifiedBy: string; // Guardará el email del usuario que hizo el cambio
+  modifiedBy: string;
 
   @Prop({ trim: true, default: 'Sistema' })
-  modificationSource: string; // 'Importación Excel' o 'Edición Manual'
+  modificationSource: string;
 }
 
 export const InmobiliariaSchema = SchemaFactory.createForClass(Inmobiliaria);

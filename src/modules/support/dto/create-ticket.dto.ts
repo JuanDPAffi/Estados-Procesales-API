@@ -9,7 +9,6 @@ export class CreateTicketDto {
   @IsNotEmpty()
   content: string;
 
-  // Si llega esto, es una consulta de proceso. Si no, es soporte general.
   @IsOptional()
   @IsObject()
   metadata?: {

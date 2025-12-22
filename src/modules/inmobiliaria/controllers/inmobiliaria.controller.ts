@@ -1,9 +1,4 @@
-import { 
-  Controller, Get, Post, Put, Patch, Body, Param, UseGuards, 
-  UseInterceptors, UploadedFile, BadRequestException, 
-  Req,
-  Query
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Param, UseGuards, UseInterceptors, UploadedFile, BadRequestException, Req } from '@nestjs/common';
 import { InmobiliariaService } from '../services/inmobiliaria.service';
 import { CreateInmobiliariaDto, UpdateInmobiliariaDto } from '../dto/inmobiliaria.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -34,9 +29,8 @@ export class InmobiliariaController {
   }
   
   @Get('send-import-reminder')
-  @Permissions(PERMISSIONS.INMO_IMPORT) // Asegúrate que el Admin/User tenga este permiso
+  @Permissions(PERMISSIONS.INMO_IMPORT)
   async sendImportReminder() {
-    // Ya no necesitamos recibir nada, el servicio lee el .env
     await this.mailService.sendImportReminderEmail();
     
     return { 
@@ -56,12 +50,10 @@ export class InmobiliariaController {
   async update(
     @Param('id') id: string, 
     @Body() updateDto: UpdateInmobiliariaDto,
-    @Req() req: any // <--- Usamos 'any' para acceder a .user sin problemas de tipado estricto
+    @Req() req: any
   ) {
-    // Obtenemos el email del usuario logueado o 'Sistema' si no existe
     const userEmail = req.user?.email || 'Sistema';
     
-    // Pasamos el email como tercer argumento
     return this.inmoService.update(id, updateDto, userEmail);
   }
 
@@ -82,7 +74,6 @@ export class InmobiliariaController {
     
     const userEmail = req.user?.email || 'Sistema';
 
-    // Pasamos el email como segundo argumento
     return this.inmoService.importInmobiliarias(file, userEmail);
   }
 }

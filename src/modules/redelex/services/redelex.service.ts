@@ -29,7 +29,7 @@ export class RedelexService {
     }
   }
 
-async getMisProcesosLive(userNit: string) {
+  async getMisProcesosLive(userNit: string, nombreInmobiliaria: string = '') {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
     const data = await this.secureRedelexGet(
@@ -41,11 +41,11 @@ async getMisProcesosLive(userNit: string) {
     if (!rawString) return { success: true, identificacion: userNit, procesos: [] };
 
     const items = JSON.parse(rawString) as any[];
-    
     const procesosMap = new Map<number, any>();
 
     items.forEach((item) => {
-      const id = item['ID Proceso'];
+      const id = Number(item['ID Proceso']);
+      if (!id) return;
       
       if (!procesosMap.has(id)) {
         procesosMap.set(id, {
@@ -67,27 +67,42 @@ async getMisProcesosLive(userNit: string) {
       const proceso = procesosMap.get(id);
       const rol = String(item['Sujeto Intervencion'] || '').toUpperCase().trim();
 
+      const idSujeto = String(item['Sujeto Identificacion'] || item['Identificacion'] || item['Nit'] || '').trim();
+      const nombreSujeto = String(item['Sujeto Nombre'] || '').trim();
+
       if (rol === 'DEMANDANTE') {
-        proceso.demandanteNombre = String(item['Sujeto Nombre'] ?? '').trim();
-        if (item['Sujeto Identificacion']) {
-             proceso.demandanteIdentificacion = String(item['Sujeto Identificacion']).trim();
-        } else {
-             // Si no viene la columna explícita, intenta buscarla o dejarla vacía
-        }
+        proceso.demandanteNombre = nombreSujeto;
+        proceso.demandanteIdentificacion = idSujeto;
       } 
       else if (rol === 'DEMANDADO') {
-        proceso.demandadoNombre = String(item['Sujeto Nombre'] ?? '').trim();
-        if (item['Sujeto Identificacion']) {
-             proceso.demandadoIdentificacion = String(item['Sujeto Identificacion']).trim();
-        }
+        proceso.demandadoNombre = nombreSujeto;
+        proceso.demandadoIdentificacion = idSujeto;
       }
     });
 
     const nitBusqueda = userNit.trim();
+    const nombreBusqueda = nombreInmobiliaria.toUpperCase().replace(/\./g, '').replace(' SAS', '').replace(' S.A.S', '').trim();
     
     const procesosFiltrados = Array.from(procesosMap.values()).filter(p => {
+        const clase = String(p.claseProceso || '').toUpperCase();
+        const esClaseValida = clase.includes('EJECUTIVO SINGULAR') || clase.includes('VERBAL SUMARIO');
+        
+        if (!esClaseValida) {
+            return false;
+        }
+
         const idDemandante = String(p.demandanteIdentificacion || '');
-        return idDemandante.includes(nitBusqueda);
+        const nombreDemandante = String(p.demandanteNombre || '').toUpperCase();
+
+        if (idDemandante && idDemandante.includes(nitBusqueda)) {
+            return true;
+        }
+
+        if (!idDemandante && nombreBusqueda.length > 3 && nombreDemandante.includes(nombreBusqueda)) {
+            return true;
+        }
+
+        return false;
     });
 
     const procesosMapeados = procesosFiltrados.map(p => ({

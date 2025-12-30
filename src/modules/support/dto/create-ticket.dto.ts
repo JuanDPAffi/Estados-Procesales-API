@@ -1,6 +1,10 @@
-import { IsNotEmpty, IsString, IsOptional, IsObject } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsObject, IsEmail } from 'class-validator';
 
 export class CreateTicketDto {
+  @IsEmail()
+  @IsOptional()
+  email?: string; 
+
   @IsString()
   @IsNotEmpty()
   subject: string;

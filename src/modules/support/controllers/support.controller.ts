@@ -1,3 +1,9 @@
+/*
+  Cambios (30-12-2025) - Santiago Obando:
+  - Se agregó el mapeo de `ticketEmail` para pasar el email enviado en el formulario
+    (`createDto.email`) hacia el servicio de soporte.
+  - Motivo: permitir que el email ingresado en el modal sea el reply-to en HubSpot/CMR.
+*/
 import { Controller, Post, Get, Query, Body, UseGuards, Req } from '@nestjs/common';
 import { SupportService } from '../services/support.service';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
@@ -14,9 +20,10 @@ export class SupportController {
   @Post('ticket')
   async createTicket(@Req() req, @Body() createDto: CreateTicketDto) {
     const { email, name, nit, role } = req.user;
-    
+    const ticketEmail = createDto?.email || email;
+
     return this.supportService.createTicket(
-      { email, name, nit, role },
+      { email, name, nit, role, ticketEmail },
       createDto
     );
   }

@@ -1,3 +1,8 @@
+/*
+  Cambios (30-12-2025) - Santiago Obando:
+  - Ahora el servicio prioriza `user.ticketEmail || user.email` al buscar contactos y empresas en HubSpot.
+  - Motivo: usar el email ingresado en el formulario como contact/empresa lookup y reply-to.
+*/
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +14,7 @@ interface UserContext {
   name: string;
   nit?: string;
   role?: string;
+  ticketEmail:string;
 }
 
 @Injectable()
@@ -174,12 +180,12 @@ export class SupportService {
       'Content-Type': 'application/json',
     };
 
-    const contactId = await this.findContactId(user.email, headers);
+    const contactId = await this.findContactId(user.email || user.email, headers);
     let companyId = null;
     const isAffi = user.role?.toLowerCase() === 'affi' || user.nit === '900053370';
     
     if (!isAffi && user.nit) {
-      companyId = await this.findCompanyId(user.nit, user.email, headers);
+      companyId = await this.findCompanyId(user.nit, user.email || user.email, headers);
     }
 
     const associations = [];
@@ -228,7 +234,8 @@ SOPORTE TÉCNICO - PLATAFORMA
 
     const userInfo = `
 Usuario: ${user.name}
-Email: ${user.email}
+Correo: ${user.email}
+Correo de respuesta: ${user.ticketEmail} 
 Rol: ${user.role || 'N/A'}
 NIT: ${user.nit || 'N/A'}
 --------------------------------

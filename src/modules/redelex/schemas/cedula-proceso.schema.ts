@@ -6,7 +6,7 @@ export type CedulaProcesoDocument = CedulaProceso & Document;
 
 @Schema({ timestamps: true })
 export class CedulaProceso {
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   procesoId: number;
 
   @Prop()

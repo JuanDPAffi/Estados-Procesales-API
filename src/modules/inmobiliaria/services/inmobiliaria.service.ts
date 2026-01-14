@@ -70,20 +70,13 @@ export class InmobiliariaService {
     }
 
     const uniqueRawData = new Map<string, any>();
-
     rawData.forEach((row: any) => {
-      const nit = String(row['Nit'] || row['NIT'] || '').trim();
-      if (nit && !uniqueRawData.has(nit)) {
-        uniqueRawData.set(nit, row);
-      }
+      const codigo = String(row['Cod. Inmobiliaria'] || row['Cod Inmobiliaria'] || '').trim();
+      if (codigo && !uniqueRawData.has(codigo)) uniqueRawData.set(codigo, row);
     });
 
-    const uniqueRows = Array.from(uniqueRawData.values());
-
-    const excelInmos = uniqueRows.map((row: any) => {
+    const excelInmos = Array.from(uniqueRawData.values()).map((row: any) => {
       const estadoExcel = String(row['Estado Inmobiliaria'] || '').trim();
-      const isActiveRow = estadoExcel === 'Activa';
-
       return {
         nit: String(row['Nit'] || row['NIT'] || '').trim(),
         codigo: String(row['Cod. Inmobiliaria'] || row['Cod Inmobiliaria'] || '').trim(),
@@ -93,77 +86,106 @@ export class InmobiliariaService {
         ciudad: String(row['Ciudad'] || '').trim(),
         telefono: String(row['Telefono'] || '').trim(),
         emailContacto: String(row['Email'] || row['EMAIL'] || '').trim().toLowerCase(), 
-        isActive: isActiveRow 
+        isActive: estadoExcel === 'Activa'
       };
     }).filter(item => item.nit && item.codigo);
 
     if (excelInmos.length === 0) throw new BadRequestException('No se encontraron registros válidos.');
 
-    const currentInmosDocs = await this.inmoModel.find().select('nit codigo isActive');
-    const currentNitsMap = new Set(currentInmosDocs.map(d => d.nit));
-    const excelNits = new Set(excelInmos.map(i => i.nit));
+    const currentInmosDocs = await this.inmoModel.find().select(
+      'nit codigo nombreInmobiliaria fechaInicioFianza departamento ciudad telefono emailContacto isActive'
+    );
+    
+    const currentMap = new Map(currentInmosDocs.map(d => [d.codigo, d]));
+    const excelCodigosSet = new Set(excelInmos.map(i => i.codigo));
 
     let created = 0;
     let updated = 0;
+    let skipped = 0;
     let deactivated = 0;
 
     const inmoOperations = [];
     const nitsToUpdateUsers: { nit: string, isActive: boolean }[] = [];
 
     for (const item of excelInmos) {
-        inmoOperations.push({
-          updateOne: {
-            filter: { nit: item.nit },
-            update: {
-              $set: {
-                nombreInmobiliaria: item.nombreInmobiliaria,
-                codigo: item.codigo,
-                fechaInicioFianza: item.fechaInicioFianza,
-                departamento: item.departamento,
-                ciudad: item.ciudad,
-                telefono: item.telefono,
-                emailContacto: item.emailContacto,
-                isActive: item.isActive,
-                modifiedBy: userEmail,
-                modificationSource: 'Importación Excel'
-              },
-              $setOnInsert: { emailRegistrado: null }
-            },
-            upsert: true
+        const existing = currentMap.get(item.codigo);
+
+        if (existing) {
+          const hasChanges = 
+            existing.nit !== item.nit ||
+            existing.nombreInmobiliaria !== item.nombreInmobiliaria ||
+            existing.departamento !== item.departamento ||
+            existing.ciudad !== item.ciudad ||
+            existing.telefono !== item.telefono ||
+            existing.emailContacto !== item.emailContacto ||
+            existing.isActive !== item.isActive ||
+            this.datesAreDifferent(existing.fechaInicioFianza, item.fechaInicioFianza);
+
+          if (hasChanges) {
+             inmoOperations.push({
+              updateOne: {
+                filter: { codigo: item.codigo },
+                update: {
+                  $set: {
+                    nit: item.nit,
+                    nombreInmobiliaria: item.nombreInmobiliaria,
+                    fechaInicioFianza: item.fechaInicioFianza,
+                    departamento: item.departamento,
+                    ciudad: item.ciudad,
+                    telefono: item.telefono,
+                    emailContacto: item.emailContacto,
+                    isActive: item.isActive,
+                    modifiedBy: userEmail,
+                    modificationSource: 'Importación Excel'
+                  }
+                }
+              }
+            });
+            updated++;
+            nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
+          } else {
+            skipped++;
           }
-        });
-
-        nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
-
-        if (currentNitsMap.has(item.nit)) {
-          updated++;
         } else {
+          inmoOperations.push({
+            updateOne: {
+              filter: { codigo: item.codigo },
+              update: {
+                $set: { ...item, modifiedBy: userEmail, modificationSource: 'Importación Excel' },
+                $setOnInsert: { emailRegistrado: null }
+              },
+              upsert: true
+            }
+          });
           created++;
+          nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
         }
     }
 
-    const nitsToDeactivate = Array.from(currentNitsMap).filter(nit => {
-      if (excelNits.has(nit)) return false;
-      if (this.PROTECTED_NITS.includes(nit)) return false; 
-      return true;
-    });
+    const codesToDeactivate: string[] = [];
+    for (const doc of currentInmosDocs) {
+        if (!excelCodigosSet.has(doc.codigo)) {
+            if (!this.PROTECTED_NITS.includes(doc.nit) && doc.isActive) {
+                codesToDeactivate.push(doc.codigo);
+                nitsToUpdateUsers.push({ nit: doc.nit, isActive: false });
+            }
+        }
+    }
     
-    if (nitsToDeactivate.length > 0) {
+    if (codesToDeactivate.length > 0) {
       inmoOperations.push({
         updateMany: {
-          filter: { nit: { $in: nitsToDeactivate } },
+          filter: { codigo: { $in: codesToDeactivate } },
           update: { 
             $set: { 
               isActive: false,
               modifiedBy: userEmail,
-              modificationSource: 'Inactivación Masiva por Excel'
+              modificationSource: 'Inactivación Masiva (Ausente en Excel)'
             } 
           }
         }
       });
-      deactivated = nitsToDeactivate.length;
-      
-      nitsToDeactivate.forEach(nit => nitsToUpdateUsers.push({ nit, isActive: false }));
+      deactivated = codesToDeactivate.length;
     }
 
     if (inmoOperations.length > 0) {
@@ -173,13 +195,8 @@ export class InmobiliariaService {
     const nitsToActivate = nitsToUpdateUsers.filter(x => x.isActive).map(x => x.nit);
     const nitsToBlock = nitsToUpdateUsers.filter(x => !x.isActive).map(x => x.nit);
 
-    if (nitsToActivate.length > 0) {
-      await this.userModel.updateMany({ nit: { $in: nitsToActivate } }, { $set: { isActive: true } });
-    }
-
-    if (nitsToBlock.length > 0) {
-      await this.userModel.updateMany({ nit: { $in: nitsToBlock } }, { $set: { isActive: false } });
-    }
+    if (nitsToActivate.length > 0) await this.userModel.updateMany({ nit: { $in: nitsToActivate } }, { $set: { isActive: true } });
+    if (nitsToBlock.length > 0) await this.userModel.updateMany({ nit: { $in: nitsToBlock } }, { $set: { isActive: false } });
 
     return {
       message: 'Sincronización completada',
@@ -187,8 +204,14 @@ export class InmobiliariaService {
         procesados_excel: excelInmos.length,
         nuevos: created,
         actualizados: updated,
-        inactivados: deactivated 
+        inactivados: deactivated
       }
     };
+  }
+
+  private datesAreDifferent(d1: any, d2: any): boolean {
+    const time1 = d1 ? new Date(d1).getTime() : 0;
+    const time2 = d2 ? new Date(d2).getTime() : 0;
+    return Math.abs(time1 - time2) > 1000;
   }
 }

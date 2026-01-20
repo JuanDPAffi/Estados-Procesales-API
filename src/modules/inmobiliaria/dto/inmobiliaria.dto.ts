@@ -71,3 +71,51 @@ export class UpdateInmobiliariaDto {
   @IsOptional()
   emailContacto?: string;
 }
+
+export class InmobiliariaEstadisticasProcesosDto {
+  // Total de inmobiliarias que tienen al menos un proceso jurídico 
+  totalInmobiliariasConProcesos: number;
+
+  // Desglose de inmobiliarias activas 
+  activas: {
+    // Cantidad de inmobiliarias activas con procesos 
+    cantidad: number;
+    // Porcentaje sobre el total de inmobiliarias con procesos 
+    porcentaje: number;
+  };
+
+  // Desglose de inmobiliarias inactivas
+  inactivas: {
+    // Cantidad de inmobiliarias inactivas con procesos
+    cantidad: number;
+    // Porcentaje sobre el total de inmobiliarias con procesos
+    porcentaje: number;
+  };
+}
+
+/**
+ * DTO para las estadísticas de usuarios en inmobiliarias con procesos
+ * Agregar al archivo inmobiliaria.dto.ts (después de InmobiliariaEstadisticasProcesosDto)
+ */
+export class InmobiliariaEstadisticasUsuariosDto {
+  /** Total de inmobiliarias que tienen procesos jurídicos */
+  totalInmobiliariasConProcesos: number;
+
+  /** Inmobiliarias con usuario asignado y activo */
+  conUsuarioActivo: {
+    cantidad: number;
+    porcentaje: number;
+  };
+
+  /** Inmobiliarias con usuario asignado pero inactivo */
+  conUsuarioInactivo: {
+    cantidad: number;
+    porcentaje: number;
+  };
+
+  /** Inmobiliarias sin usuario asignado */
+  sinUsuario: {
+    cantidad: number;
+    porcentaje: number;
+  };
+}

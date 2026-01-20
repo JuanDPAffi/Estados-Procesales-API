@@ -27,6 +27,23 @@ export class InmobiliariaController {
   async findAll() {
     return this.inmoService.findAll();
   }
+
+  //Cambio nueva ruta para estadísticas de inmobiliarias con procesos jurídicos
+  //Cambio Santiago Obando Hurtado
+  @Get('estadisticas/con-procesos')
+  @Permissions(PERMISSIONS.INMO_VIEW)
+  async getEstadisticasConProcesos() {
+    return this.inmoService.getEstadisticasConProcesos();
+  }
+
+  
+   // Retorna estadísticas de usuarios asignados a inmobiliarias con procesos
+
+@Get('estadisticas/usuarios-con-procesos')
+@Permissions(PERMISSIONS.INMO_VIEW)
+async getEstadisticasUsuariosConProcesos() {
+  return this.inmoService.getEstadisticasUsuariosConProcesos();
+}
   
   @Get('send-import-reminder')
   @Permissions(PERMISSIONS.INMO_IMPORT)

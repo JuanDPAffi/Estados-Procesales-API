@@ -12,6 +12,7 @@ import { User, UserSchema } from './schemas/user.schema';
 import { PasswordResetToken, PasswordResetTokenSchema } from './schemas/password-reset-token.schema';
 import { Inmobiliaria, InmobiliariaSchema } from '../../modules/inmobiliaria/schema/inmobiliaria.schema';
 import { MailModule } from '../mail/mail.module';
+import { SalesTeam, SalesTeamSchema } from '../comercial/schemas/sales-team.schema';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { MailModule } from '../mail/mail.module';
       { name: User.name, schema: UserSchema },
       { name: PasswordResetToken.name, schema: PasswordResetTokenSchema },
       { name: Inmobiliaria.name, schema: InmobiliariaSchema },
+      { name: SalesTeam.name, schema: SalesTeamSchema },
     ]),
 
     PassportModule.register({ defaultStrategy: 'jwt' }),

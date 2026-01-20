@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, BadRequestException, NotFoundException, ForbiddenException, ParseIntPipe, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, BadRequestException, NotFoundException, ForbiddenException, ParseIntPipe, Req, Query } from '@nestjs/common';
 import { RedelexService } from '../services/redelex.service';
 import { SystemOrJwtGuard } from '../../../common/guards/system-or-jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -31,10 +31,36 @@ export class RedelexController {
   }
 
   @Get('procesos-por-identificacion/:identificacion')
-  @Permissions(PERMISSIONS.PROCESOS_VIEW_ALL)
-  async getProcesosPorIdentificacion(@Param('identificacion') identificacion: string) {
+  @Permissions(
+      PERMISSIONS.PROCESOS_VIEW_ALL, 
+      PERMISSIONS.COMMERCIAL_VIEW_GLOBAL,
+      PERMISSIONS.COMMERCIAL_VIEW_TEAM,
+      PERMISSIONS.COMMERCIAL_VIEW_OWN
+  )
+  async getProcesosPorIdentificacion(
+      @Param('identificacion') identificacion: string,
+      @Req() req: any // <--- Inyectamos usuario
+  ) {
     if (!identificacion) throw new BadRequestException('La identificación es obligatoria');
-    return this.redelexService.getProcesosByIdentificacion(identificacion);
+    // Pasamos el usuario para filtrar por RLS
+    return this.redelexService.getProcesosByIdentificacion(identificacion, req.user);
+  }
+
+  // Endpoint nuevo para el Tablero Comercial
+  @Get('tablero-comercial')
+  @Permissions(
+      PERMISSIONS.COMMERCIAL_VIEW_GLOBAL, 
+      PERMISSIONS.COMMERCIAL_VIEW_TEAM, 
+      PERMISSIONS.COMMERCIAL_VIEW_OWN,
+      PERMISSIONS.PROCESOS_VIEW_ALL
+  )
+  async getTableroComercial(
+    @Req() req, 
+    @Query('page') page: number,
+    @Query('limit') limit: number,
+    @Query('search') search: string
+  ) {
+    return this.redelexService.getProcesosComerciales(req.user, { page, limit, search });
   }
 
   @Get('proceso/:id')
@@ -76,9 +102,17 @@ export class RedelexController {
   }
 
   @Get('informe-inmobiliaria/:informeId')
-  @Permissions(PERMISSIONS.REPORTS_VIEW)
-  async getInformeInmobiliar(@Param('informeId', ParseIntPipe) informeId: number) {
-    const data = await this.redelexService.getInformeInmobiliaria(informeId);
+  @Permissions(
+      PERMISSIONS.REPORTS_VIEW, 
+      PERMISSIONS.COMMERCIAL_VIEW_GLOBAL,
+      PERMISSIONS.COMMERCIAL_VIEW_TEAM,
+      PERMISSIONS.COMMERCIAL_VIEW_OWN
+  )
+  async getInformeInmobiliar(
+      @Param('informeId', ParseIntPipe) informeId: number,
+      @Req() req: any
+  ) {
+    const data = await this.redelexService.getInformeInmobiliaria(informeId, req.user);
     return { success: true, count: data.length, data };
   }
 

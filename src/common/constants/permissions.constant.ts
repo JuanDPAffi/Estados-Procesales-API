@@ -5,6 +5,10 @@ export const PERMISSIONS = {
   // Gestión de Importaciones
   INMO_IMPORT: 'inmo:import',
 
+  COMMERCIAL_VIEW_GLOBAL: 'commercial:view_global', // Gerente Comercial
+  COMMERCIAL_VIEW_TEAM: 'commercial:view_team',     // Director Comercial
+  COMMERCIAL_VIEW_OWN: 'commercial:view_own',       // Gerente de Cuenta
+
   // Gestión de Usuarios
   USERS_VIEW: 'users:view', // Ver lista de usuarios
   USERS_CREATE: 'users:create', // Crear nuevos usuarios
@@ -47,6 +51,24 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'procesos:view_own',
     'utils:export',
   ],
+
+  [ValidRoles.GERENTE_COMERCIAL]: [
+    'commercial:view_global',
+    'reports:view',
+    'utils:export',
+  ],
+
+  [ValidRoles.DIRECTOR_COMERCIAL]: [
+    'commercial:view_team',
+    'reports:view',
+    'utils:export',
+  ],
+
+  [ValidRoles.GERENTE_CUENTA]: [
+    'commercial:view_own',
+    'reports:view',
+    'utils:export',
+  ]
 };
 
 export const ALL_PERMISSIONS_LIST = Object.values(PERMISSIONS);

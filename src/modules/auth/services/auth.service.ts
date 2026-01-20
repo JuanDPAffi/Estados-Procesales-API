@@ -11,6 +11,7 @@ import { PasswordResetToken, PasswordResetTokenDocument } from '../schemas/passw
 import { MailService } from '../../mail/services/mail.service';
 import { RegisterDto, LoginDto, RequestPasswordResetDto, ResetPasswordDto } from '../dto/auth.dto';
 import { Inmobiliaria, InmobiliariaDocument } from '../../inmobiliaria/schema/inmobiliaria.schema';
+import { SalesTeam, SalesTeamDocument } from '../../comercial/schemas/sales-team.schema';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +24,10 @@ export class AuthService {
 
     @InjectModel(PasswordResetToken.name)
     private readonly passwordResetTokenModel: Model<PasswordResetTokenDocument>,
+    
+    @InjectModel(SalesTeam.name) 
+    private readonly salesTeamModel: Model<SalesTeamDocument>,
+
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
@@ -39,26 +44,18 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const { name, email, password, role, nit, codigoInmobiliaria } = registerDto;
-    const existingUser = await this.userModel.findOne({
-      email: email.toLowerCase(),
-    });
+    
+    const existingUser = await this.userModel.findOne({ email: email.toLowerCase() });
     if (existingUser) throw new ConflictException('El email ya está registrado');
 
     if (!nit || !codigoInmobiliaria) {
       throw new BadRequestException('NIT y Código de Inmobiliaria son obligatorios');
     }
 
-    const inmobiliaria = await this.inmobiliariaModel.findOne({
-      nit: nit,
-      codigo: codigoInmobiliaria,
-    });
+    const inmobiliaria = await this.inmobiliariaModel.findOne({ nit, codigo: codigoInmobiliaria });
 
-    if (!inmobiliaria) {
-      throw new BadRequestException('Datos de inmobiliaria inválidos (NIT o Código incorrectos)');
-    }
-    if (!inmobiliaria.isActive) {
-      throw new UnauthorizedException('Esta inmobiliaria se encuentra inactiva');
-    }
+    if (!inmobiliaria) throw new BadRequestException('Datos de inmobiliaria inválidos');
+    if (!inmobiliaria.isActive) throw new UnauthorizedException('Esta inmobiliaria se encuentra inactiva');
 
     const emailLower = email.toLowerCase();
     const isAffiEmail = emailLower.endsWith('@affi.net');
@@ -69,25 +66,41 @@ export class AuthService {
     }
 
     if (!isAffiCorporate) {
-      if (inmobiliaria.emailRegistrado) {
-        if (inmobiliaria.emailRegistrado !== emailLower) {
+      if (inmobiliaria.emailRegistrado && inmobiliaria.emailRegistrado !== emailLower) {
            throw new ConflictException('Esta inmobiliaria ya tiene un usuario administrador registrado.');
-        }
-      } else {
+      } else if (!inmobiliaria.emailRegistrado) {
         inmobiliaria.emailRegistrado = emailLower;
         await inmobiliaria.save();
       }
     }
 
+    let assignedRole: string = ValidRoles.INMOBILIARIA;
+
+    if (isAffiEmail) {
+      const leaderConfig = await this.salesTeamModel.findOne({ directorEmail: emailLower });
+
+      if (leaderConfig) {
+        assignedRole = leaderConfig.managerRole || ValidRoles.DIRECTOR_COMERCIAL;
+      } 
+      else {
+        const memberConfig = await this.salesTeamModel.findOne({ accountManagersEmails: emailLower });
+        
+        if (memberConfig) {
+          assignedRole = ValidRoles.GERENTE_CUENTA;
+        } else {
+          assignedRole = ValidRoles.AFFI;
+        }
+      }
+    } else {
+      assignedRole = ValidRoles.INMOBILIARIA;
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const activationToken = crypto.randomBytes(32).toString('hex');
-    const assignedRole = isAffiEmail ? ValidRoles.AFFI : ValidRoles.INMOBILIARIA;
-    const nameCapitalized = name
-      .split(' ')
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-      .join(' ');
+    const nameCapitalized = name.split(' ').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(' ');
 
     const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[assignedRole] || [];
+
     const user = await this.userModel.create({
       name: nameCapitalized,
       email: emailLower,
@@ -108,7 +121,7 @@ export class AuthService {
     this.mailService.sendActivationEmail(user.email, user.name, activationLink);
 
     return {
-      message: 'Registro exitoso. Por favor revisa tu correo para activar la cuenta.',
+      message: `Registro exitoso como ${assignedRole.replace('_', ' ').toUpperCase()}. Revisa tu correo.`,
     };
   }
 

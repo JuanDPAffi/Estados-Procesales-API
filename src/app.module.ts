@@ -7,6 +7,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { InmobiliariaModule } from './modules/inmobiliaria/inmobiliaria.module';
 import { UsersModule } from './modules/users/users.module';
 import { SupportModule } from './modules/support/support.module';
+import { ComercialModule } from './modules/comercial/comercial.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SupportModule } from './modules/support/support.module';
     InmobiliariaModule,
     UsersModule,
     SupportModule,
+    ComercialModule,
   ],
   controllers: [],
   providers: [],

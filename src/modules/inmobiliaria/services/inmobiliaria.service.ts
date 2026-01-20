@@ -300,11 +300,6 @@ export class InmobiliariaService {
 
 
 
-/**
-   * VERSIÓN SIMPLIFICADA Y CORREGIDA
-   * Obtiene estadísticas de usuarios asignados a inmobiliarias con procesos
-   * Usa el NIT para hacer el join más eficiente
-   */
   async getEstadisticasUsuariosConProcesos() {
     try {
       console.log('[EstadisticasUsuarios] Iniciando...');

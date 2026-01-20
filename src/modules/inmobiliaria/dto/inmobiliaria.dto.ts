@@ -93,10 +93,6 @@ export class InmobiliariaEstadisticasProcesosDto {
   };
 }
 
-/**
- * DTO para las estadísticas de usuarios en inmobiliarias con procesos
- * Agregar al archivo inmobiliaria.dto.ts (después de InmobiliariaEstadisticasProcesosDto)
- */
 export class InmobiliariaEstadisticasUsuariosDto {
   /** Total de inmobiliarias que tienen procesos jurídicos */
   totalInmobiliariasConProcesos: number;

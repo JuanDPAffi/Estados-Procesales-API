@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsDateString } from 'class-validator';
 
 export class CreateInmobiliariaDto {
@@ -53,6 +54,7 @@ export class UpdateInmobiliariaDto {
 
   @IsOptional()
   @IsDateString()
+  @Type(() => Date)
   fechaInicioFianza?: Date;
 
   @IsString()

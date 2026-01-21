@@ -25,7 +25,13 @@ export class InmobiliariaService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
+  private normalizeNit(nit: any): string {
+    if (!nit) return '';
+    return String(nit).replace(/\D/g, ''); 
+  }
+
   async create(createDto: CreateInmobiliariaDto) {
+    createDto.nit = this.normalizeNit(createDto.nit);
     const existing = await this.inmoModel.findOne({ nit: createDto.nit, codigo: createDto.codigo });
     if (existing) throw new ConflictException('Ya existe una inmobiliaria con ese NIT y Código');
     const newInmo = new this.inmoModel(createDto);
@@ -33,7 +39,16 @@ export class InmobiliariaService {
   }
 
   async findAll() {
-    return this.inmoModel.find().sort({ createdAt: -1 }).exec();
+    const inmos = await this.inmoModel.find().sort({ createdAt: -1 }).lean().exec();
+    
+    const nitsWithProcesos = await this.inmoModel.db.collection('cedulaprocesos').distinct('demandanteIdentificacion');
+    const nitsSet = new Set(nitsWithProcesos);
+
+    return inmos.map(inmo => ({
+      ...inmo,
+      _id: inmo._id.toString(),
+      tieneProcesos: nitsSet.has(inmo.nit)
+    }));
   }
 
   async findOne(id: string) {
@@ -43,6 +58,10 @@ export class InmobiliariaService {
   }
 
   async update(id: string, updateDto: UpdateInmobiliariaDto, userEmail: string = 'Sistema') {
+    if (updateDto.nit) {
+        updateDto.nit = this.normalizeNit(updateDto.nit);
+    }
+
     const dataToUpdate = {
       ...updateDto,
       modifiedBy: userEmail,
@@ -136,7 +155,7 @@ export class InmobiliariaService {
       }
 
       const normalizedData = rows.map(row => ({
-        nit: String(row.nit).trim(),
+        nit: this.normalizeNit(row.nit),
         codigo: String(row.cod_inmobiliaria).trim(),
         nombreInmobiliaria: String(row.inmobiliaria).trim(),
         departamento: String(row.departamento || '').trim(),
@@ -175,7 +194,7 @@ export class InmobiliariaService {
     const normalizedData = Array.from(uniqueRawData.values()).map((row: any) => {
       const estadoExcel = String(row['Estado Inmobiliaria'] || '').trim();
       return {
-        nit: String(row['Nit'] || row['NIT'] || '').trim(),
+        nit: this.normalizeNit(row['Nit'] || row['NIT']),
         codigo: String(row['Cod. Inmobiliaria'] || row['Cod Inmobiliaria'] || '').trim(),
         nombreInmobiliaria: String(row['Inmobiliaria'] || row['NOMBRE'] || '').trim(),
         fechaInicioFianza: row['Fecha Incio Fianza'] || row['Fecha Inicio'] || null,
@@ -202,7 +221,6 @@ export class InmobiliariaService {
 
     let created = 0;
     let updated = 0;
-    let skipped = 0;
     let deactivated = 0;
 
     const inmoOperations = [];
@@ -245,8 +263,6 @@ export class InmobiliariaService {
              });
              updated++;
              nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
-          } else {
-            skipped++;
           }
         } else {
           inmoOperations.push({
@@ -318,33 +334,14 @@ export class InmobiliariaService {
     const time2 = d2 ? new Date(d2).getTime() : 0;
     return Math.abs(time1 - time2) > 1000;
   }
-  /**
-   * Obtiene estadísticas de inmobiliarias que tienen procesos jurídicos asociados
-   * @returns Objeto con estadísticas detalladas de inmobiliarias con procesos
-   */
-/**
-   * Obtiene estadísticas de inmobiliarias que tienen procesos jurídicos asociados
-   * Incluye también el conteo de "otros demandantes" (NITs con procesos que no son inmobiliarias)
-   * @returns Objeto con estadísticas detalladas de inmobiliarias con procesos
-   */
-  async getEstadisticasConProcesos() {
-    
-    try {
-      
-      // Obtener todas las inmobiliarias
-      const todasInmobiliarias = await this.inmoModel.find().select('nit isActive nombreInmobiliaria').exec();
-      
-      console.log(`[EstadisticasProcesos] Total inmobiliarias en BD: ${todasInmobiliarias.length}`);
 
-      // Obtener todos los NITs únicos que tienen procesos
+  async getEstadisticasConProcesos() {
+    try {
+      const todasInmobiliarias = await this.inmoModel.find().select('nit isActive nombreInmobiliaria').exec();
       const coleccionProcesos = this.inmoModel.db.collection('cedulaprocesos');
-      
-      // Verificar que la colección existe y tiene documentos
       const totalProcesos = await coleccionProcesos.countDocuments();
-      console.log(`[EstadisticasProcesos] Total documentos en cedulaprocesos: ${totalProcesos}`);
 
       if (totalProcesos === 0) {
-        console.log('[EstadisticasProcesos] No hay procesos en la colección');
         return {
           totalInmobiliariasConProcesos: 0,
           activas: { cantidad: 0, porcentaje: 0 },
@@ -353,32 +350,21 @@ export class InmobiliariaService {
         };
       }
 
-      // Obtener NITs únicos de demandantes
       const nitsConProcesos = await coleccionProcesos.distinct('demandanteIdentificacion');
-      
-      console.log(`[EstadisticasProcesos] NITs únicos con procesos: ${nitsConProcesos.length}`);
-      console.log(`[EstadisticasProcesos] Primeros 5 NITs: ${nitsConProcesos.slice(0, 5).join(', ')}`);
-
-      // Filtrar NITs válidos (no vacíos)
       const nitsValidos = nitsConProcesos.filter(nit => nit && nit.trim() !== '');
-      console.log(`[EstadisticasProcesos] NITs válidos (no vacíos): ${nitsValidos.length}`);
-
-      // Filtrar inmobiliarias que tienen su NIT en la lista de procesos
+      
+      const nitsValidosSet = new Set(nitsValidos);
       const inmobiliariasConProcesos = todasInmobiliarias.filter(inmo => 
-        nitsValidos.includes(inmo.nit)
+        nitsValidosSet.has(inmo.nit)
       );
 
-      console.log(`[EstadisticasProcesos] Inmobiliarias con procesos: ${inmobiliariasConProcesos.length}`);
-
-      // CALCULAR OTROS DEMANDANTES
-      // Son los NITs válidos que tienen procesos pero NO están en la tabla de inmobiliarias
       const otrosDemandantesCount = nitsValidos.length - inmobiliariasConProcesos.length;
-      console.log(`[EstadisticasProcesos] Otros demandantes (no inmobiliarias): ${otrosDemandantesCount}`);
+      
+      // Totales para cálculo
+      const totalClientes = inmobiliariasConProcesos.length; // Inmobiliarias encontradas
+      const totalUniverso = nitsValidos.length; // Total de NITs únicos (Clientes + Externos)
 
-      const total = inmobiliariasConProcesos.length;
-
-      if (total === 0 && otrosDemandantesCount === 0) {
-        console.log('[EstadisticasProcesos] No hay demandantes con procesos');
+      if (totalClientes === 0 && otrosDemandantesCount === 0) {
         return {
           totalInmobiliariasConProcesos: 0,
           activas: { cantidad: 0, porcentaje: 0 },
@@ -387,22 +373,17 @@ export class InmobiliariaService {
         };
       }
 
-      // Separar por estado activo/inactivo
       const activasCount = inmobiliariasConProcesos.filter(inmo => inmo.isActive).length;
       const inactivasCount = inmobiliariasConProcesos.filter(inmo => !inmo.isActive).length;
 
-      console.log(`[EstadisticasProcesos] Activas: ${activasCount}, Inactivas: ${inactivasCount}`);
-
-      // Calcular porcentajes sobre el total de inmobiliarias con procesos
-      const porcentajeActivas = total > 0 ? Math.round((activasCount / total) * 100 * 100) / 100 : 0;
-      const porcentajeInactivas = total > 0 ? Math.round((inactivasCount / total) * 100 * 100) / 100 : 0;
-
-      // Calcular porcentaje de otros demandantes sobre el total de NITs válidos
-      const totalDemandantes = nitsValidos.length;
-      const porcentajeOtros = totalDemandantes > 0 ? Math.round((otrosDemandantesCount / totalDemandantes) * 100 * 100) / 100 : 0;
+      // --- CORRECCIÓN APLICADA AQUÍ ---
+      // Usamos 'totalUniverso' como divisor para TODOS los porcentajes para que sumen 100%
+      const porcentajeActivas = totalUniverso > 0 ? Math.round((activasCount / totalUniverso) * 100 * 100) / 100 : 0;
+      const porcentajeInactivas = totalUniverso > 0 ? Math.round((inactivasCount / totalUniverso) * 100 * 100) / 100 : 0;
+      const porcentajeOtros = totalUniverso > 0 ? Math.round((otrosDemandantesCount / totalUniverso) * 100 * 100) / 100 : 0;
 
       return {
-        totalInmobiliariasConProcesos: total,
+        totalInmobiliariasConProcesos: totalClientes,
         activas: {
           cantidad: activasCount,
           porcentaje: porcentajeActivas
@@ -417,7 +398,7 @@ export class InmobiliariaService {
         }
       };
     } catch (error) {
-      console.error('[EstadisticasProcesos] Error completo:', error);
+      console.error('[EstadisticasProcesos] Error:', error);
       return {
         totalInmobiliariasConProcesos: 0,
         activas: { cantidad: 0, porcentaje: 0 },
@@ -427,18 +408,11 @@ export class InmobiliariaService {
     }
   }
 
-
-
   async getEstadisticasUsuariosConProcesos() {
     try {
-      console.log('[EstadisticasUsuarios] Iniciando...');
-
-      // Obtener NITs únicos que tienen procesos
       const coleccionProcesos = this.inmoModel.db.collection('cedulaprocesos');
       const totalProcesos = await coleccionProcesos.countDocuments();
       
-      console.log(`[EstadisticasUsuarios] Total procesos: ${totalProcesos}`);
-
       if (totalProcesos === 0) {
         return {
           totalInmobiliariasConProcesos: 0,
@@ -449,7 +423,6 @@ export class InmobiliariaService {
       }
 
       const nitsConProcesos = await coleccionProcesos.distinct('demandanteIdentificacion');
-      console.log(`[EstadisticasUsuarios] NITs con procesos: ${nitsConProcesos.length}`);
 
       if (nitsConProcesos.length === 0) {
         return {
@@ -460,13 +433,11 @@ export class InmobiliariaService {
         };
       }
 
-      // Obtener todas las inmobiliarias con procesos
       const inmobiliariasConProcesos = await this.inmoModel.find({
         nit: { $in: nitsConProcesos }
       }).select('nit emailRegistrado nombreInmobiliaria').exec();
 
       const total = inmobiliariasConProcesos.length;
-      console.log(`[EstadisticasUsuarios] Inmobiliarias con procesos: ${total}`);
 
       if (total === 0) {
         return {
@@ -477,18 +448,13 @@ export class InmobiliariaService {
         };
       }
 
-      // Obtener todos los NITs que tienen usuarios
       const nitsInmobiliarias = inmobiliariasConProcesos.map(i => i.nit);
       
-      // Buscar usuarios por NIT (más directo y eficiente)
       const usuariosPorNit = await this.userModel.find({
         nit: { $in: nitsInmobiliarias },
-        role: 'inmobiliaria'  // Solo usuarios tipo inmobiliaria
+        role: 'inmobiliaria'
       }).select('nit email isActive').exec();
 
-      console.log(`[EstadisticasUsuarios] Usuarios encontrados: ${usuariosPorNit.length}`);
-
-      // Crear un mapa de NIT -> estado de usuario
       const mapaUsuarios = new Map();
       usuariosPorNit.forEach(user => {
         if (user.nit) {
@@ -496,28 +462,22 @@ export class InmobiliariaService {
         }
       });
 
-      // Clasificar inmobiliarias
       let conUsuarioActivo = 0;
       let conUsuarioInactivo = 0;
       let sinUsuario = 0;
 
       inmobiliariasConProcesos.forEach(inmo => {
         if (mapaUsuarios.has(inmo.nit)) {
-          // Tiene usuario, verificar si está activo
           if (mapaUsuarios.get(inmo.nit)) {
             conUsuarioActivo++;
           } else {
             conUsuarioInactivo++;
           }
         } else {
-          // No tiene usuario
           sinUsuario++;
         }
       });
 
-      console.log(`[EstadisticasUsuarios] Activos: ${conUsuarioActivo}, Inactivos: ${conUsuarioInactivo}, Sin usuario: ${sinUsuario}`);
-
-      // Calcular porcentajes
       const pctUsuarioActivo = total > 0 ? Math.round((conUsuarioActivo / total) * 100 * 100) / 100 : 0;
       const pctUsuarioInactivo = total > 0 ? Math.round((conUsuarioInactivo / total) * 100 * 100) / 100 : 0;
       const pctSinUsuario = total > 0 ? Math.round((sinUsuario / total) * 100 * 100) / 100 : 0;
@@ -547,5 +507,4 @@ export class InmobiliariaService {
       };
     }
   }
-  
 }

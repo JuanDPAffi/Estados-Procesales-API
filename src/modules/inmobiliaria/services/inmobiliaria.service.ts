@@ -218,6 +218,11 @@ export class InmobiliariaService {
    * Obtiene estadísticas de inmobiliarias que tienen procesos jurídicos asociados
    * @returns Objeto con estadísticas detalladas de inmobiliarias con procesos
    */
+/**
+   * Obtiene estadísticas de inmobiliarias que tienen procesos jurídicos asociados
+   * Incluye también el conteo de "otros demandantes" (NITs con procesos que no son inmobiliarias)
+   * @returns Objeto con estadísticas detalladas de inmobiliarias con procesos
+   */
   async getEstadisticasConProcesos() {
     
     try {
@@ -239,7 +244,8 @@ export class InmobiliariaService {
         return {
           totalInmobiliariasConProcesos: 0,
           activas: { cantidad: 0, porcentaje: 0 },
-          inactivas: { cantidad: 0, porcentaje: 0 }
+          inactivas: { cantidad: 0, porcentaje: 0 },
+          otrosDemandantes: { cantidad: 0, porcentaje: 0 }
         };
       }
 
@@ -249,21 +255,31 @@ export class InmobiliariaService {
       console.log(`[EstadisticasProcesos] NITs únicos con procesos: ${nitsConProcesos.length}`);
       console.log(`[EstadisticasProcesos] Primeros 5 NITs: ${nitsConProcesos.slice(0, 5).join(', ')}`);
 
+      // Filtrar NITs válidos (no vacíos)
+      const nitsValidos = nitsConProcesos.filter(nit => nit && nit.trim() !== '');
+      console.log(`[EstadisticasProcesos] NITs válidos (no vacíos): ${nitsValidos.length}`);
+
       // Filtrar inmobiliarias que tienen su NIT en la lista de procesos
       const inmobiliariasConProcesos = todasInmobiliarias.filter(inmo => 
-        nitsConProcesos.includes(inmo.nit)
+        nitsValidos.includes(inmo.nit)
       );
 
       console.log(`[EstadisticasProcesos] Inmobiliarias con procesos: ${inmobiliariasConProcesos.length}`);
 
+      // CALCULAR OTROS DEMANDANTES
+      // Son los NITs válidos que tienen procesos pero NO están en la tabla de inmobiliarias
+      const otrosDemandantesCount = nitsValidos.length - inmobiliariasConProcesos.length;
+      console.log(`[EstadisticasProcesos] Otros demandantes (no inmobiliarias): ${otrosDemandantesCount}`);
+
       const total = inmobiliariasConProcesos.length;
 
-      if (total === 0) {
-        console.log('[EstadisticasProcesos] Ninguna inmobiliaria coincide con los NITs de procesos');
+      if (total === 0 && otrosDemandantesCount === 0) {
+        console.log('[EstadisticasProcesos] No hay demandantes con procesos');
         return {
           totalInmobiliariasConProcesos: 0,
           activas: { cantidad: 0, porcentaje: 0 },
-          inactivas: { cantidad: 0, porcentaje: 0 }
+          inactivas: { cantidad: 0, porcentaje: 0 },
+          otrosDemandantes: { cantidad: 0, porcentaje: 0 }
         };
       }
 
@@ -273,9 +289,13 @@ export class InmobiliariaService {
 
       console.log(`[EstadisticasProcesos] Activas: ${activasCount}, Inactivas: ${inactivasCount}`);
 
-      // Calcular porcentajes (con 2 decimales)
+      // Calcular porcentajes sobre el total de inmobiliarias con procesos
       const porcentajeActivas = total > 0 ? Math.round((activasCount / total) * 100 * 100) / 100 : 0;
       const porcentajeInactivas = total > 0 ? Math.round((inactivasCount / total) * 100 * 100) / 100 : 0;
+
+      // Calcular porcentaje de otros demandantes sobre el total de NITs válidos
+      const totalDemandantes = nitsValidos.length;
+      const porcentajeOtros = totalDemandantes > 0 ? Math.round((otrosDemandantesCount / totalDemandantes) * 100 * 100) / 100 : 0;
 
       return {
         totalInmobiliariasConProcesos: total,
@@ -286,6 +306,10 @@ export class InmobiliariaService {
         inactivas: {
           cantidad: inactivasCount,
           porcentaje: porcentajeInactivas
+        },
+        otrosDemandantes: {
+          cantidad: otrosDemandantesCount,
+          porcentaje: porcentajeOtros
         }
       };
     } catch (error) {
@@ -293,7 +317,8 @@ export class InmobiliariaService {
       return {
         totalInmobiliariasConProcesos: 0,
         activas: { cantidad: 0, porcentaje: 0 },
-        inactivas: { cantidad: 0, porcentaje: 0 }
+        inactivas: { cantidad: 0, porcentaje: 0 },
+        otrosDemandantes: { cantidad: 0, porcentaje: 0 }
       };
     }
   }

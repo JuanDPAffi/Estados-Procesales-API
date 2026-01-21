@@ -91,6 +91,12 @@ export class InmobiliariaEstadisticasProcesosDto {
     // Porcentaje sobre el total de inmobiliarias con procesos
     porcentaje: number;
   };
+
+    otrosDemandantes: { 
+      // Cantidad de inmobiliarias con otros demandantes
+      cantidad: number;
+      // Porcentaje sobre el total de inmobiliarias con procesos 
+      porcentaje: number; }; 
 }
 
 export class InmobiliariaEstadisticasUsuariosDto {

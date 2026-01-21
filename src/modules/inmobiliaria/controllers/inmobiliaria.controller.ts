@@ -7,14 +7,32 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Permissions } from '../../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
 import { MailService } from '../../mail/services/mail.service';
+import { HubspotSyncService } from '../services/hubspot-sync.service';
 
 @Controller('inmobiliarias')
 @UseGuards(SystemOrJwtGuard, RolesGuard)
 export class InmobiliariaController {
   constructor(
     private readonly inmoService: InmobiliariaService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly hubspotService: HubspotSyncService
   ) {}
+
+  @Post('sync-hubspot')
+  @Permissions(PERMISSIONS.SYSTEM_CONFIG)
+  async syncHubspotManual() {
+    await this.hubspotService.syncHubspotOwners();
+    return { 
+      success: true, 
+      message: 'Sincronización con HubSpot ejecutada correctamente.' 
+    };
+  }
+
+  @Post('sync-db')
+  async syncFromDb(@Req() req: any) {
+    const userEmail = req.user?.email || 'Automatización Sistema';
+    return this.inmoService.syncFromExternalDb(userEmail);
+  }
 
   @Post()
   @Permissions(PERMISSIONS.INMO_CREATE)

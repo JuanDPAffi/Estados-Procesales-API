@@ -7,6 +7,9 @@ export enum ValidRoles {
   ADMIN = 'admin',
   AFFI = 'affi',
   INMOBILIARIA = 'inmobiliaria',
+  GERENTE_COMERCIAL = 'gerente_comercial',
+  DIRECTOR_COMERCIAL = 'director_comercial',
+  GERENTE_CUENTA = 'gerente_cuenta',
 }
 
 @Schema({ timestamps: true })

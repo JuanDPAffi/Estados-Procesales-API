@@ -45,15 +45,11 @@ export class RedelexService {
     }
   }
 
-  // ===========================================================================
-  // HELPER PRIVADO: Centraliza la lógica de permisos y NITs
-  // ===========================================================================
   private async calculateAllowedNits(user: any): Promise<{ isGlobal: boolean, allowedNits: string[] }> {
     let allowedNits: string[] = [];
     let isGlobal = false;
     const userEmail = user.email ? user.email.toLowerCase() : '';
 
-    // 1. Roles Globales (Admin, Affi, Gerente Comercial Nacional)
     if (
       user.role === ValidRoles.ADMIN || 
       user.role === ValidRoles.AFFI ||
@@ -62,7 +58,6 @@ export class RedelexService {
     ) {
       isGlobal = true;
     }
-    // 2. Director Comercial (Equipo)
     else if (this.hasPermission(user, PERMISSIONS.COMMERCIAL_VIEW_TEAM)) {
       const team = await this.salesTeamModel.findOne({ directorEmail: userEmail });
       
@@ -74,7 +69,6 @@ export class RedelexService {
         allowedNits = inmos.map(i => i.nit);
       }
     }
-    // 3. Gerente de Cuenta (Propio)
     else if (this.hasPermission(user, PERMISSIONS.COMMERCIAL_VIEW_OWN)) {
       const inmos = await this.inmoModel.find({ 
         assignedAccountManagerEmail: userEmail 
@@ -86,9 +80,6 @@ export class RedelexService {
     return { isGlobal, allowedNits };
   }
 
-  // ===========================================================================
-  // MÉTODO ACTUALIZADO: Tablero Comercial (Usa el helper)
-  // ===========================================================================
   async getProcesosComerciales(user: any, filters: any = {}) {
     const { isGlobal, allowedNits } = await this.calculateAllowedNits(user);
 
@@ -164,25 +155,19 @@ export class RedelexService {
     };
   }
 
-  // ===========================================================================
-  // MÉTODO ACTUALIZADO: Consultar Proceso por ID/NIT (Filtro BD)
-  // ===========================================================================
   async getProcesosByIdentificacion(
     identificacion: string,
-    user: any // <--- Recibimos usuario para filtrar
+    user: any
   ): Promise<ProcesosPorIdentificacionResponse> {
     const value = identificacion.trim();
     const pattern = this.escapeRegex(value);
 
-    // 1. Calculamos permisos
     const { isGlobal, allowedNits } = await this.calculateAllowedNits(user);
 
-    // Si no es global y no tiene NITs, retornar vacío
     if (!isGlobal && allowedNits.length === 0) {
        return { success: true, identificacion: value, procesos: [] };
     }
 
-    // 2. Query Base de Búsqueda
     const searchCondition = {
         $or: [
           { demandadoIdentificacion: { $regex: pattern, $options: 'i' } },
@@ -194,7 +179,6 @@ export class RedelexService {
 
     let finalQuery: any = searchCondition;
 
-    // 3. Aplicamos Seguridad (RLS) si no es global
     if (!isGlobal) {
         finalQuery = {
             $and: [
@@ -212,7 +196,7 @@ export class RedelexService {
     const docs = await this.cedulaProcesoModel
       .find(finalQuery)
       .sort({ updatedAt: -1 })
-      .limit(50); // Limite de seguridad
+      .limit(50);
 
     const procesos: ProcesoResumenDto[] = docs.map((d) => ({
       procesoId: d.procesoId,
@@ -233,16 +217,12 @@ export class RedelexService {
     };
   }
 
-  // ===========================================================================
-  // MÉTODO ACTUALIZADO: Informe Inmobiliaria (Filtro en Memoria)
-  // ===========================================================================
   async getInformeInmobiliaria(
     informeId: number,
-    user: any // <--- Recibimos usuario
+    user: any
   ): Promise<InformeInmobiliariaDto[]> {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
-    // 1. Calculamos permisos
     const { isGlobal, allowedNits } = await this.calculateAllowedNits(user);
 
     if (!isGlobal && allowedNits.length === 0) return [];
@@ -257,7 +237,6 @@ export class RedelexService {
 
     const items = JSON.parse(rawString) as InformeInmobiliariaRaw[];
 
-    // 2. Mapeo inicial
     let result = items.map((item) => ({
       idProceso: item['ID Proceso'],
       claseProceso: item['Clase Proceso'],
@@ -276,12 +255,10 @@ export class RedelexService {
       ciudadInmueble: item['Ciudad'],
     }));
 
-    // 3. Filtrado de Seguridad (Si no es global)
     if (!isGlobal) {
       result = result.filter(item => {
         const demte = String(item.demandanteIdentificacion || '').trim();
         const demdo = String(item.demandadoIdentificacion || '').trim();
-        // Solo pasa si uno de los NITs permitidos está involucrado
         return allowedNits.includes(demte) || allowedNits.includes(demdo);
       });
     }
@@ -289,14 +266,12 @@ export class RedelexService {
     return result;
   }
 
-  // ... (Resto de métodos privados y getMisProcesosLive se mantienen igual)
   private hasPermission(user: any, perm: string): boolean {
     if (!user) return false;
     if (user.role === ValidRoles.ADMIN) return true;
     return user.permissions && user.permissions.includes(perm);
   }
 
-  // Métodos antiguos sin cambios (secureRedelexGet, tokens, etc...)
   async getValidAuthToken(): Promise<string> {
     if (this.tokenRefreshPromise) {
       return this.tokenRefreshPromise;

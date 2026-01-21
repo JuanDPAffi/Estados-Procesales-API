@@ -13,13 +13,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const authHeader = request.headers.authorization;
     const systemToken = this.configService.get<string>('SYSTEM_TASK_TOKEN');
 
-    // Caso 1: Token de sistema (Power Automate)
     if (systemToken && authHeader === systemToken) {
       request.user = { role: 'system' };
       return true;
     }
 
-    // Caso 2: JWT normal (Bearer <token>)
     return super.canActivate(context);
   }
 

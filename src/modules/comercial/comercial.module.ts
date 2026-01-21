@@ -6,6 +6,6 @@ import { SalesTeam, SalesTeamSchema } from './schemas/sales-team.schema';
   imports: [
     MongooseModule.forFeature([{ name: SalesTeam.name, schema: SalesTeamSchema }])
   ],
-  exports: [MongooseModule] // Exportamos para que RedelexService lo pueda leer
+  exports: [MongooseModule]
 })
 export class ComercialModule {}

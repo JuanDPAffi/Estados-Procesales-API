@@ -8,7 +8,6 @@ import { SystemOrJwtGuard } from '../../../common/guards/system-or-jwt.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ENDPOINTS PÚBLICOS (NO LLEVAN GUARD)
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto) {
@@ -69,7 +68,6 @@ export class AuthController {
     return this.authService.resetPassword(resetDto);
   }
 
-  // ENDPOINTS PROTEGIDOS (AQUÍ APLICAMOS EL GUARD)
   @UseGuards(SystemOrJwtGuard)
   @Get('profile')
   getProfile(@Req() req) {

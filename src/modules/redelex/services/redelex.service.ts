@@ -45,7 +45,7 @@ export class RedelexService {
     }
   }
 
-  private async calculateAllowedNits(user: any): Promise<{ isGlobal: boolean, allowedNits: string[] }> {
+  public async calculateAllowedNits(user: any): Promise<{ isGlobal: boolean, allowedNits: string[] }> {
     let allowedNits: string[] = [];
     let isGlobal = false;
     const userEmail = user.email ? user.email.toLowerCase() : '';

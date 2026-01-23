@@ -5,6 +5,8 @@ import { RedelexService } from './services/redelex.service';
 import { RedelexToken, RedelexTokenSchema } from './schemas/redelex-token.schema';
 import { CedulaProceso, CedulaProcesoSchema } from './schemas/cedula-proceso.schema';
 import { AuthModule } from '../auth/auth.module';
+import { InmobiliariaModule } from '../inmobiliaria/inmobiliaria.module';
+import { ComercialModule } from '../comercial/comercial.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { AuthModule } from '../auth/auth.module';
       { name: CedulaProceso.name, schema: CedulaProcesoSchema },
     ]),
     AuthModule,
+    ComercialModule,
+    InmobiliariaModule 
   ],
   controllers: [RedelexController],
   providers: [RedelexService],

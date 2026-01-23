@@ -36,6 +36,9 @@ export class Inmobiliaria {
   @Prop({ trim: true, default: '', lowercase: true })
   emailContacto: string;
 
+  @Prop({ trim: true, lowercase: true, default: null })
+  assignedAccountManagerEmail: string | null;
+
   @Prop({ trim: true })
   modifiedBy: string;
 

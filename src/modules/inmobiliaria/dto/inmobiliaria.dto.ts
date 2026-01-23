@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsDateString } from 'class-validator';
 
 export class CreateInmobiliariaDto {
@@ -53,6 +54,7 @@ export class UpdateInmobiliariaDto {
 
   @IsOptional()
   @IsDateString()
+  @Type(() => Date)
   fechaInicioFianza?: Date;
 
   @IsString()
@@ -70,4 +72,54 @@ export class UpdateInmobiliariaDto {
   @IsString()
   @IsOptional()
   emailContacto?: string;
+}
+
+export class InmobiliariaEstadisticasProcesosDto {
+  // Total de inmobiliarias que tienen al menos un proceso jurídico 
+  totalInmobiliariasConProcesos: number;
+
+  // Desglose de inmobiliarias activas 
+  activas: {
+    // Cantidad de inmobiliarias activas con procesos 
+    cantidad: number;
+    // Porcentaje sobre el total de inmobiliarias con procesos 
+    porcentaje: number;
+  };
+
+  // Desglose de inmobiliarias inactivas
+  inactivas: {
+    // Cantidad de inmobiliarias inactivas con procesos
+    cantidad: number;
+    // Porcentaje sobre el total de inmobiliarias con procesos
+    porcentaje: number;
+  };
+
+    otrosDemandantes: { 
+      // Cantidad de inmobiliarias con otros demandantes
+      cantidad: number;
+      // Porcentaje sobre el total de inmobiliarias con procesos 
+      porcentaje: number; }; 
+}
+
+export class InmobiliariaEstadisticasUsuariosDto {
+  /** Total de inmobiliarias que tienen procesos jurídicos */
+  totalInmobiliariasConProcesos: number;
+
+  /** Inmobiliarias con usuario asignado y activo */
+  conUsuarioActivo: {
+    cantidad: number;
+    porcentaje: number;
+  };
+
+  /** Inmobiliarias con usuario asignado pero inactivo */
+  conUsuarioInactivo: {
+    cantidad: number;
+    porcentaje: number;
+  };
+
+  /** Inmobiliarias sin usuario asignado */
+  sinUsuario: {
+    cantidad: number;
+    porcentaje: number;
+  };
 }

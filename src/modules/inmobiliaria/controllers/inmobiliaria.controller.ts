@@ -7,14 +7,32 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Permissions } from '../../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
 import { MailService } from '../../mail/services/mail.service';
+import { HubspotSyncService } from '../services/hubspot-sync.service';
 
 @Controller('inmobiliarias')
 @UseGuards(SystemOrJwtGuard, RolesGuard)
 export class InmobiliariaController {
   constructor(
     private readonly inmoService: InmobiliariaService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly hubspotService: HubspotSyncService
   ) {}
+
+  @Post('sync-hubspot')
+  @Permissions(PERMISSIONS.SYSTEM_CONFIG)
+  async syncHubspotManual() {
+    await this.hubspotService.syncHubspotOwners();
+    return { 
+      success: true, 
+      message: 'Sincronización con HubSpot ejecutada correctamente.' 
+    };
+  }
+
+  @Post('sync-db')
+  async syncFromDb(@Req() req: any) {
+    const userEmail = req.user?.email || 'Automatización Sistema';
+    return this.inmoService.syncFromExternalDb(userEmail);
+  }
 
   @Post()
   @Permissions(PERMISSIONS.INMO_CREATE)
@@ -27,6 +45,23 @@ export class InmobiliariaController {
   async findAll() {
     return this.inmoService.findAll();
   }
+
+  //Cambio nueva ruta para estadísticas de inmobiliarias con procesos jurídicos
+  //Cambio Santiago Obando Hurtado
+  @Get('estadisticas/con-procesos')
+  @Permissions(PERMISSIONS.INMO_VIEW)
+  async getEstadisticasConProcesos() {
+    return this.inmoService.getEstadisticasConProcesos();
+  }
+
+  
+   // Retorna estadísticas de usuarios asignados a inmobiliarias con procesos
+
+@Get('estadisticas/usuarios-con-procesos')
+@Permissions(PERMISSIONS.INMO_VIEW)
+async getEstadisticasUsuariosConProcesos() {
+  return this.inmoService.getEstadisticasUsuariosConProcesos();
+}
   
   @Get('send-import-reminder')
   @Permissions(PERMISSIONS.INMO_IMPORT)

@@ -18,6 +18,12 @@ export class InmobiliariaController {
     private readonly hubspotService: HubspotSyncService
   ) {}
 
+  @Get('detalle-modal/:nit')
+  @Permissions(PERMISSIONS.PROCESOS_VIEW_ALL, PERMISSIONS.PROCESOS_VIEW_OWN, PERMISSIONS.COMMERCIAL_VIEW_GLOBAL) // Permisos amplios para quien consulta procesos
+  async getDetallePorNit(@Param('nit') nit: string) {
+    return this.inmoService.findOneByNit(nit);
+  }
+
   @Post('sync-hubspot')
   @Permissions(PERMISSIONS.SYSTEM_CONFIG)
   async syncHubspotManual() {

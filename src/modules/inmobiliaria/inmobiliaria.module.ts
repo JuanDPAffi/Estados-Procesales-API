@@ -7,6 +7,7 @@ import { User, UserSchema } from '../auth/schemas/user.schema';
 import { MailModule } from '../mail/mail.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HubspotSyncService } from './services/hubspot-sync.service';
+import { ComercialModule } from '../comercial/comercial.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { HubspotSyncService } from './services/hubspot-sync.service';
       { name: User.name, schema: UserSchema },
     ]),
     MailModule,
+    ComercialModule,
     ScheduleModule.forRoot()
   ],
   controllers: [InmobiliariaController],

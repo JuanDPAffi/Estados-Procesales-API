@@ -25,6 +25,15 @@ export class InmobiliariaService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
+  async findOneByNit(nit: string) {
+    // Normalizamos por si llega con puntos o guiones
+    const cleanNit = this.normalizeNit(nit);
+    // Buscamos y devolvemos solo lo necesario
+    return this.inmoModel.findOne({ nit: cleanNit })
+      .select('nombreInmobiliaria nit zonaAffi cluster montoAfianzado cantidadContratos nombreRepresentante emailRepresentante equipoComercial')
+      .exec();
+  }
+
   private normalizeNit(nit: any): string {
     if (!nit) return '';
     return String(nit).replace(/\D/g, ''); 

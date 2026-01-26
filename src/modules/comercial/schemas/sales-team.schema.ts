@@ -12,9 +12,13 @@ export enum Zona {
 
 @Schema({ timestamps: true })
 export class SalesTeam {
+  
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   directorEmail: string;
-
+  
+  @Prop({ required: true, trim: true }) 
+  directorName: string;
+  
   @Prop({ 
     required: true, 
     enum: [ValidRoles.DIRECTOR_COMERCIAL, ValidRoles.GERENTE_COMERCIAL],

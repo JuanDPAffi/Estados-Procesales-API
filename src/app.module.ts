@@ -8,6 +8,7 @@ import { InmobiliariaModule } from './modules/inmobiliaria/inmobiliaria.module';
 import { UsersModule } from './modules/users/users.module';
 import { SupportModule } from './modules/support/support.module';
 import { ComercialModule } from './modules/comercial/comercial.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ComercialModule } from './modules/comercial/comercial.module';
     UsersModule,
     SupportModule,
     ComercialModule,
+    SettingsModule
   ],
   controllers: [],
   providers: [],

@@ -12,6 +12,7 @@ export class Inmobiliaria {
   @Prop({ required: true, trim: true })
   nit: string;
 
+  // ... (otros campos existentes se mantienen igual) ...
   @Prop({ required: true, trim: true })
   codigo: string;
 
@@ -40,10 +41,41 @@ export class Inmobiliaria {
   assignedAccountManagerEmail: string | null;
 
   @Prop({ trim: true })
+  nombreRepresentante: string;
+
+  @Prop({ trim: true, lowercase: true })
+  emailRepresentante: string;
+
+  @Prop({ trim: true })
   modifiedBy: string;
 
   @Prop({ trim: true, default: 'Sistema' })
   modificationSource: string;
+
+  // --- NUEVOS CAMPOS HUBSPOT ---
+  @Prop({ trim: true })
+  hubspotOwnerId: string;
+
+  @Prop({ trim: true })
+  zonaAffi: string;
+
+  @Prop({ trim: true })
+  cluster: string;
+
+  @Prop()
+  montoAfianzado: number;
+
+  @Prop()
+  cantidadContratos: number;
+
+  // Objeto incrustado para acceso rápido desde el frontend
+  @Prop({ type: Object }) 
+  equipoComercial: {
+    gerenteNombre: string;
+    gerenteEmail: string;
+    directorName: string;
+    directorEmail: string;
+  };
 }
 
 export const InmobiliariaSchema = SchemaFactory.createForClass(Inmobiliaria);

@@ -295,7 +295,7 @@ export class RedelexService {
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
-      { headers: { 'api-license-id': this.licenseId, 'token': this.apiKey } },
+      { headers: { 'api-license-id': this.licenseId } },
     );
     const authToken = response.data.authToken;
     const expiresIn = response.data.expiresInSeconds || 86400;
@@ -307,7 +307,7 @@ export class RedelexService {
 
   async secureRedelexGet(url: string, params: any = {}) {
     let token = await this.getValidAuthToken();
-    const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId, 'token': this.apiKey };
+    const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId };
     try {
       return (await axios.get(url, { params, headers: headers })).data;
     } catch (err: any) {
@@ -321,7 +321,25 @@ export class RedelexService {
   }
 
   async getProcesoById(procesoId: number) {
-    return this.secureRedelexGet(`${this.baseUrl}/Procesos/GetProceso`, { procesoId });
+    const token = await this.getValidAuthToken();
+    const url = `${this.baseUrl}/Procesos/GetProcesoModulos`;
+
+    const response = await axios.post(
+      url,
+      {
+        procesoId: procesoId,
+        modulos: ["P-SUJ", "P-ACT", "P-CPERS", "P-CALIF", "P-MEDC", "P-ABOGA"],
+        filtros: []
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'api-license-id': this.licenseId,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    return response.data;
   }
 
   async getProcesoDetalleById(procesoId: number): Promise<ProcesoDetalleDto | null> {

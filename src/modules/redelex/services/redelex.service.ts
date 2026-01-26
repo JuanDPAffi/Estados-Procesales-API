@@ -195,8 +195,7 @@ export class RedelexService {
 
     const docs = await this.cedulaProcesoModel
       .find(finalQuery)
-      .sort({ updatedAt: -1 })
-      .limit(50);
+      .sort({ updatedAt: -1 });
 
     const procesos: ProcesoResumenDto[] = docs.map((d) => ({
       procesoId: d.procesoId,

@@ -296,7 +296,7 @@ export class RedelexService {
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
-      { headers: { 'api-license-id': this.licenseId } },
+      { headers: { 'api-license-id': this.licenseId, 'token': this.apiKey } },
     );
     const authToken = response.data.authToken;
     const expiresIn = response.data.expiresInSeconds || 86400;
@@ -308,13 +308,13 @@ export class RedelexService {
 
   async secureRedelexGet(url: string, params: any = {}) {
     let token = await this.getValidAuthToken();
-    const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId };
+    const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId, 'token': this.apiKey };
     try {
       return (await axios.get(url, { params, headers: headers })).data;
     } catch (err: any) {
       if (err.response?.status === 401) {
         token = await this.handleTokenRefresh();
-        headers.Authorization = token;
+        headers.Authorization = `Bearer ${token}`;
         return (await axios.get(url, { params, headers: headers })).data;
       }
       throw err;

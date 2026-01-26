@@ -328,7 +328,7 @@ export class RedelexService {
       url,
       {
         procesoId: procesoId,
-        modulos: ["P-SUJ", "P-ACT", "P-CPERS", "P-CALIF", "P-MEDC", "P-ABOGA"],
+        modulos: ["P-SUJ", "P-ACT", "P-CPERS", "P-CALIF", "P-MEDC", "P-ABOGA", "P-ACTJU"],
         filtros: []
       },
       {

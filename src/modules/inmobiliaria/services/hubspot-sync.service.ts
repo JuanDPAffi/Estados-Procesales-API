@@ -146,7 +146,6 @@ export class HubspotSyncService {
     }
   }
 
-  // --- HELPERS LÓGICA COMERCIAL (CORREGIDO) ---
 
   private async buildSalesTeamMap(): Promise<Map<string, { directorEmail: string, directorName: string }>> {
     const map = new Map();

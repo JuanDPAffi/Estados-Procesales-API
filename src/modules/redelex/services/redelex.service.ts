@@ -231,6 +231,8 @@ export class RedelexService {
       { token: this.apiKey, informeId },
     );
 
+    this.logger.log(`[a3] Datos de informe ${informeId} recibidos. Iniciando mapeo y filtrado.`);
+
     const rawString = data.jsonString as string;
     if (!rawString) return [];
 
@@ -255,6 +257,7 @@ export class RedelexService {
     }));
 
     if (!isGlobal) {
+      this.logger.log(`[a3] Aplicando filtros de segmentación comercial sobre ${result.length} procesos.`);
       result = result.filter(item => {
         const demte = String(item.demandanteIdentificacion || '').trim();
         const demdo = String(item.demandadoIdentificacion || '').trim();
@@ -292,11 +295,13 @@ export class RedelexService {
 
   private async generateAndStoreToken(): Promise<string> {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
+    this.logger.log(`[a2] Solicitando nuevo token a Redelex: ${this.baseUrl}/apikeys/CreateApiKey`);
     const response = await axios.post(
       `${this.baseUrl}/apikeys/CreateApiKey`,
       { token: this.apiKey },
       { headers: { 'api-license-id': this.licenseId } },
     );
+    this.logger.log(`[a3] Redelex respondió exitosamente a la solicitud de token.`);
     const authToken = response.data.authToken;
     const expiresIn = response.data.expiresInSeconds || 86400;
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -309,13 +314,19 @@ export class RedelexService {
     let token = await this.getValidAuthToken();
     const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId };
     try {
-      return (await axios.get(url, { params, headers: headers })).data;
+      this.logger.log(`[a2] Consultando Redelex (GET): ${url} con params: ${JSON.stringify(params)}`);
+      const response = await axios.get(url, { params, headers: headers });
+      this.logger.log(`[a3] Redelex respondió exitosamente a GET: ${url}`);
+      
+      return response.data;
     } catch (err: any) {
       if (err.response?.status === 401) {
+        this.logger.warn(`[a3] Redelex retornó 401. Reintentando con refresco de token...`);
         token = await this.handleTokenRefresh();
         headers.Authorization = `Bearer ${token}`;
         return (await axios.get(url, { params, headers: headers })).data;
       }
+      this.logger.error(`[a3] Error en respuesta de Redelex: ${err.message}`);
       throw err;
     }
   }
@@ -323,7 +334,7 @@ export class RedelexService {
   async getProcesoById(procesoId: number) {
     const token = await this.getValidAuthToken();
     const url = `${this.baseUrl}/Procesos/GetProcesoModulos`;
-
+    this.logger.log(`[a2] Consultando detalle de proceso en Redelex (POST): ${url} para ID: ${procesoId}`);
     const response = await axios.post(
       url,
       {
@@ -339,6 +350,7 @@ export class RedelexService {
         },
       },
     );
+    this.logger.log(`[a3] Redelex respondió exitosamente al detalle del proceso ID: ${procesoId}`);
     return response.data;
   }
 

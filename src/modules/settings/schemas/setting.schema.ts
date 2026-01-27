@@ -4,7 +4,7 @@ import { Document } from 'mongoose';
 @Schema({ collection: 'system_settings' })
 export class Setting extends Document {
   @Prop({ required: true, unique: true })
-  key: string; // Ejemplo: 'maintenance_mode'
+  key: string;
 
   @Prop({ default: false })
   isActive: boolean;

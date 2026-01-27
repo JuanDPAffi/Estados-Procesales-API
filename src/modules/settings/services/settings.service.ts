@@ -7,7 +7,6 @@ import { Setting } from '../schemas/setting.schema';
 export class SettingsService implements OnModuleInit {
   constructor(@InjectModel(Setting.name) private settingModel: Model<Setting>) {}
 
-  // Se ejecuta al iniciar NestJS
   async onModuleInit() {
     const exists = await this.settingModel.findOne({ key: 'maintenance_mode' });
     if (!exists) {

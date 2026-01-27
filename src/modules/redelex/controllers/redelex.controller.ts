@@ -26,14 +26,13 @@ export class RedelexController {
 
     const respuestaServicio = await this.redelexService.getMisProcesosLive(userNit);
 
-    const result = {
+    return {
       success: true,
       identificacion: userNit,
       nombreInmobiliaria: nombreInmobiliaria,
-      procesos: respuestaServicio.procesos || []
+      procesos: respuestaServicio.procesos || [],
+      redelex_ms: respuestaServicio.redelex_ms 
     };
-
-    return result;
   }
 
   @Get('procesos-por-identificacion/:identificacion')
@@ -51,7 +50,10 @@ export class RedelexController {
     
     const result = await this.redelexService.getProcesosByIdentificacion(identificacion, req.user);
     
-    return result;
+    return {
+        ...result,
+        redelex_ms: (result as any).redelex_ms || 0 
+    };
   }
 
   @Get('tablero-comercial')
@@ -69,7 +71,10 @@ export class RedelexController {
   ) {    
     const result = await this.redelexService.getProcesosComerciales(req.user, { page, limit, search });
     
-    return result;
+    return {
+        ...result,
+        redelex_ms: (result as any).redelex_ms || 0
+    };
   }
 
   @Get('proceso/:id')
@@ -78,12 +83,14 @@ export class RedelexController {
     const data = await this.redelexService.getProcesoDetalleById(id);
     if (!data) throw new NotFoundException('Proceso no encontrado');
 
+    const redelex_ms = (data as any).redelex_ms || 0;
+
     const canViewAll = user.role === ValidRoles.ADMIN || 
       (user.permissions && user.permissions.includes(PERMISSIONS.PROCESOS_VIEW_ALL)) ||
       (user.permissions && user.permissions.includes(PERMISSIONS.COMMERCIAL_VIEW_GLOBAL));
 
     if (canViewAll) {
-        return { success: true, data };
+        return { success: true, data, redelex_ms };
     }
 
     if (!data.sujetos || !Array.isArray(data.sujetos)) {
@@ -103,7 +110,7 @@ export class RedelexController {
         });
 
         if (esClienteSuyo) {
-            return { success: true, data };
+            return { success: true, data, redelex_ms };
         }
     }
 
@@ -118,7 +125,7 @@ export class RedelexController {
         });
 
         if (esPropio) {
-            return { success: true, data };
+            return { success: true, data, redelex_ms };
         }
     }
 
@@ -128,19 +135,26 @@ export class RedelexController {
   @Get('informe-inmobiliaria/:informeId')
   @Permissions(PERMISSIONS.REPORTS_VIEW, PERMISSIONS.COMMERCIAL_VIEW_GLOBAL, PERMISSIONS.COMMERCIAL_VIEW_TEAM, PERMISSIONS.COMMERCIAL_VIEW_OWN)
   async getInformeInmobiliar(@Param('informeId', ParseIntPipe) informeId: number, @Req() req: any) {
-
     const data = await this.redelexService.getInformeInmobiliaria(informeId, req.user);
-    const response = { success: true, count: data.length, data };
     
-    return response;
+    return { 
+        success: true, 
+        count: data.length, 
+        data,
+        redelex_ms: (data as any).redelex_ms || 0
+    };
   }
 
   @Post('sync-informe/:informeId')
   @Permissions(PERMISSIONS.SYSTEM_CONFIG) 
   async syncInformeCedula(@Param('informeId', ParseIntPipe) informeId: number) {
-    
     const result = await this.redelexService.syncInformeCedulaProceso(informeId);
     
-    return { success: true, message: 'Sincronización completada', ...result };
+    return { 
+        success: true, 
+        message: 'Sincronización completada', 
+        ...result,
+        redelex_ms: (result as any).redelex_ms || 0
+    };
   }
 }

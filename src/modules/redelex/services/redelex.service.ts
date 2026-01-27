@@ -309,18 +309,20 @@ export class RedelexService {
     const t_start = performance.now();
     let token = await this.getValidAuthToken();
     const headers = { Authorization: `Bearer ${token}`, 'api-license-id': this.licenseId };
+    
     try {
-      const response = await axios.get(url, { params, headers: headers });
+      const response = await axios.get(url, { params, headers });
       const t_end = performance.now();
       const data = response.data;
       data.redelex_ms = Math.round(t_end - t_start);
-      
-      return response.data;
+      return data;
     } catch (err: any) {
       if (err.response?.status === 401) {
         token = await this.handleTokenRefresh();
         headers.Authorization = `Bearer ${token}`;
-        return (await axios.get(url, { params, headers: headers })).data;
+        const retry = await axios.get(url, { params, headers });
+        retry.data.redelex_ms = Math.round(performance.now() - t_start);
+        return retry.data;
       }
       throw err;
     }
@@ -347,15 +349,20 @@ export class RedelexService {
     );
     const t_end = performance.now();
     const data = response.data;
+    
     data.redelex_ms = Math.round(t_end - t_start);
-    return response.data;
+    
+    return data;
   }
 
-  async getProcesoDetalleById(procesoId: number): Promise<ProcesoDetalleDto | null> {
+  async getProcesoDetalleById(procesoId: number): Promise<any | null> {
     const raw = await this.getProcesoById(procesoId);
     if (!raw) return null;
     
-    const mapped = this.mapRedelexProcesoToDto(raw);
+    const mapped: any = this.mapRedelexProcesoToDto(raw);
+    if (mapped) {
+      mapped.redelex_ms = raw.redelex_ms;
+    }
     return mapped;
   }
 
@@ -451,7 +458,12 @@ export class RedelexService {
         if (!idDemandante && nombreBusqueda.length > 3 && nombreDemandante.includes(nombreBusqueda)) return true;
         return false;
     });
-    return { success: true, identificacion: userNit, procesos: procesosFiltrados.map(p => ({ ...p, sentenciaPrimeraInstancia: p.sentencia })) };
+    return { 
+      success: true, 
+      identificacion: userNit, 
+      procesos: procesosFiltrados,
+      redelex_ms: data.redelex_ms
+    };
   }
 
   private escapeRegex(value: string): string {

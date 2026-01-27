@@ -22,10 +22,7 @@ import { RedelexMetricsInterceptor } from '../../common/interceptors/redelex-met
     InmobiliariaModule 
   ],
   controllers: [RedelexController],
-  providers: [
-    RedelexService,
-    RedelexMetricsInterceptor
-  ],
+  providers: [RedelexService, RedelexMetricsInterceptor],
   exports: [RedelexService], 
 })
 export class RedelexModule {}

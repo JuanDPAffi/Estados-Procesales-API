@@ -22,7 +22,7 @@ export class SupportService {
   private readonly logger = new Logger(SupportService.name);
   private readonly hubspotBaseUrl = 'https://api.hubapi.com/crm/v3/objects';
 
-  private readonly DEFAULT_OWNER_ID = '81381349';
+  // private readonly DEFAULT_OWNER_ID = '81381349';
 
   constructor(private configService: ConfigService) {}
 
@@ -135,9 +135,8 @@ export class SupportService {
     const ticketData = {
       properties: {
         subject: subject,
-        tipo_de_solicitud: "Estados procesales",
         hs_ticket_category: "Estados Procesales",
-        hubspot_owner_id: this.DEFAULT_OWNER_ID,
+        // hubspot_owner_id: this.DEFAULT_OWNER_ID,
         grupo_de_atencion: "Servicio al cliente",
         tipo_de_llamada: dto.callType,
         area_origen_transferencia: dto.transferArea || "",
@@ -169,100 +168,92 @@ export class SupportService {
 
   async createTicket(user: UserContext, dto: CreateTicketDto) {
     const token = this.configService.get<string>('HUBSPOT_ACCESS_TOKEN');
-    
-    if (!token) {
-      this.logger.error('HUBSPOT_ACCESS_TOKEN no configurado');
-      throw new InternalServerErrorException('Error de configuración en soporte');
-    }
+    if (!token) throw new InternalServerErrorException('Error de configuración en soporte');
 
     const headers = {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
 
-    const contactId = await this.findContactId(user.email || user.email, headers);
+    const lookupEmail = user.ticketEmail || user.email;
+
+    const subtemaForm = (dto.subject || '').trim();
+
+    const isLegal = !!dto.metadata;
+
+    const ticketSubject = `Estados Procesales - ${subtemaForm}`;
+
+    const contactId = await this.findContactId(lookupEmail, headers);
+
     let companyId = null;
     const isAffi = user.role?.toLowerCase() === 'affi' || user.nit === '900053370';
-    
     if (!isAffi && user.nit) {
-      companyId = await this.findCompanyId(user.nit, user.email || user.email, headers);
+      companyId = await this.findCompanyId(user.nit, lookupEmail, headers);
     }
 
     const associations = [];
     if (contactId) {
       associations.push({
         to: { id: contactId },
-        types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 16 }]
+        types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 16 }],
       });
     }
     if (companyId) {
       associations.push({
         to: { id: companyId },
-        types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 26 }]
+        types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 26 }],
       });
     }
 
     let headerInfo = '';
-    
-    if (dto.metadata) {
-      if (!dto.subject.startsWith('[APOYO JURÍDICO]')) {
-        dto.subject = `[APOYO JURÍDICO] ${dto.subject}`;
-      }
-
+    if (isLegal) {
       headerInfo = `
-================================
-SOLICITUD DE APOYO JURÍDICO
-================================
-ID Proceso: ${dto.metadata.procesoId || 'N/A'}
-Radicado: ${dto.metadata.radicado || 'N/A'}
-Cuenta: ${dto.metadata.cuenta || 'N/A'}
-Clase: ${dto.metadata.clase || 'N/A'}
-Etapa Actual: ${dto.metadata.etapa || 'N/A'}
+  =================
+  APOYO JURÍDICO
+  =================
+  ID Proceso: ${dto.metadata.procesoId || 'N/A'}
+  Radicado: ${dto.metadata.radicado || 'N/A'}
+  Cuenta: ${dto.metadata.cuenta || 'N/A'}
+  Clase: ${dto.metadata.clase || 'N/A'}
+  Etapa Actual: ${dto.metadata.etapa || 'N/A'}
+  --------------------------------
       `;
-    } 
-    else {
-      if (!dto.subject.startsWith('[SOPORTE]')) {
-        dto.subject = `[SOPORTE] ${dto.subject}`;
-      }
-      
+    } else {
       headerInfo = `
-================================
-SOPORTE TÉCNICO - PLATAFORMA
-================================
+  =================
+  SOPORTE TÉCNICO
+  =================
       `;
     }
 
-    const userInfo = `
-Usuario: ${user.name}
-Correo: ${user.email}
-Correo de respuesta: ${user.ticketEmail} 
-Rol: ${user.role || 'N/A'}
-NIT: ${user.nit || 'N/A'}
---------------------------------
-    `;
-
     const finalContent = `
-${headerInfo}
-${userInfo}
-
-MENSAJE DEL USUARIO:
-${dto.content}
+  ${headerInfo}
+  MENSAJE DEL USUARIO:
+  ${dto.content}
     `.trim();
 
     const ticketData = {
       properties: {
         hs_pipeline: '0',
-        tipo_de_solicitud: "Estados procesales",
-        hs_ticket_category: "Estados Procesales - Soporte",
-        grupo_de_atencion: "Servicio al cliente",
-        hubspot_owner_id: "81381349",
+        hs_ticket_category: 'Estados Procesales',
+        grupo_de_atencion: 'Servicio al cliente',
+
+        subtema: subtemaForm,
+
+        nit_inmobiliaria: user.nit || '',
+        correo: user.email,
+        correo_de_respuesta: lookupEmail,
+        usuario: user.name,
+        // hubspot_owner_id: "81381349",
+
         hs_pipeline_stage: '1',
         hs_ticket_priority: 'HIGH',
         plataforma_estados_procesales: 'true',
-        subject: dto.subject,
+
+        subject: ticketSubject,
         content: finalContent,
       },
-      associations: associations.length > 0 ? associations : undefined
+      associations: associations.length > 0 ? associations : undefined,
     };
 
     try {

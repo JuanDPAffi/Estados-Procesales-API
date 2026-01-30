@@ -221,6 +221,8 @@ export class InmobiliariaService {
   }
 
   private async processBatch(incomingData: any[], userEmail: string, source: string) {
+    // 1. Obtener datos actuales para comparar cambios (Optimización de memoria)
+    // Solo traemos lo necesario para saber si vale la pena actualizar
     const currentInmosDocs = await this.inmoModel.find().select(
       'nit codigo nombreInmobiliaria fechaInicioFianza departamento ciudad telefono emailContacto isActive'
     );
@@ -233,12 +235,15 @@ export class InmobiliariaService {
     let deactivated = 0;
 
     const inmoOperations = [];
+    // Array para acumular los NITs que deben actualizar su estado de usuario al final
     const nitsToUpdateUsers: { nit: string, isActive: boolean }[] = [];
 
+    // 2. Procesar datos entrantes (Crear o Actualizar)
     for (const item of incomingData) {
         const existing = currentMap.get(item.codigo);
 
         if (existing) {
+          // Detectar si realmente hubo cambios para evitar escrituras innecesarias en BD
           const hasChanges = 
             existing.nit !== item.nit ||
             existing.nombreInmobiliaria !== item.nombreInmobiliaria ||
@@ -251,13 +256,14 @@ export class InmobiliariaService {
 
           if (hasChanges) {
              const setFields: any = {
-                nit: item.nit,
+                nit: item.nit, // AQUÍ es donde se corrige el NIT si venía mal
                 nombreInmobiliaria: item.nombreInmobiliaria,
                 departamento: item.departamento,
                 ciudad: item.ciudad,
                 isActive: item.isActive,
                 modifiedBy: userEmail,
-                modificationSource: source
+                modificationSource: source,
+                updatedAt: new Date()
              };
 
              if (item.fechaInicioFianza) setFields.fechaInicioFianza = item.fechaInicioFianza;
@@ -266,7 +272,7 @@ export class InmobiliariaService {
 
              inmoOperations.push({
                updateOne: {
-                 filter: { codigo: item.codigo },
+                 filter: { codigo: item.codigo }, // FILTRO CORRECTO: Solo por Código
                  update: { $set: setFields }
                }
              });
@@ -274,12 +280,13 @@ export class InmobiliariaService {
              nitsToUpdateUsers.push({ nit: item.nit, isActive: item.isActive });
           }
         } else {
+          // Es nuevo: Upsert True
           inmoOperations.push({
             updateOne: {
-              filter: { codigo: item.codigo },
+              filter: { codigo: item.codigo }, // FILTRO CORRECTO: Solo por Código
               update: { 
                 $set: { ...item, modifiedBy: userEmail, modificationSource: source },
-                $setOnInsert: { emailRegistrado: null }
+                $setOnInsert: { emailRegistrado: null, createdAt: new Date() }
               },
               upsert: true
             }
@@ -289,6 +296,7 @@ export class InmobiliariaService {
         }
     }
 
+    // 3. Procesar Inactivaciones (Los que estaban en BD pero NO llegaron en el Excel)
     const codesToDeactivate: string[] = [];
     for (const doc of currentInmosDocs) {
         if (!incomingCodesSet.has(doc.codigo)) {
@@ -315,12 +323,30 @@ export class InmobiliariaService {
       deactivated = codesToDeactivate.length;
     }
 
+    // 4. Ejecución Segura en Base de Datos
     if (inmoOperations.length > 0) {
-      await this.inmoModel.bulkWrite(inmoOperations);
+      try {
+        // ordered: false es CRÍTICO aquí. Permite que si una fila falla, las demás continúen.
+        await this.inmoModel.bulkWrite(inmoOperations, { ordered: false });
+      } catch (error) {
+        // Capturamos error E11000 (Duplicate Key) u otros errores de escritura parcial
+        if (error.code === 11000 || (error.writeErrors && error.writeErrors.length > 0)) {
+           const countErrores = error.writeErrors ? error.writeErrors.length : 1;
+           this.logger.warn(`Advertencia en carga masiva: ${countErrores} registros fallaron (probablemente duplicados en BD), pero el resto se procesó.`);
+           
+           // Ajustar contadores (restar los fallidos si es necesario para el reporte)
+           // Esto es visual, lo importante es que el proceso NO se detuvo.
+        } else {
+           // Si es un error grave de conexión, lo relanzamos
+           throw error;
+        }
+      }
     }
 
-    const nitsToActivate = nitsToUpdateUsers.filter(x => x.isActive).map(x => x.nit);
-    const nitsToBlock = nitsToUpdateUsers.filter(x => !x.isActive).map(x => x.nit);
+    // 5. Sincronización de Usuarios (Usuarios asociados a las inmobiliarias procesadas)
+    // Filtramos para obtener listas únicas de NITs a activar/desactivar
+    const nitsToActivate = [...new Set(nitsToUpdateUsers.filter(x => x.isActive).map(x => x.nit))];
+    const nitsToBlock = [...new Set(nitsToUpdateUsers.filter(x => !x.isActive).map(x => x.nit))];
 
     if (nitsToActivate.length > 0) await this.userModel.updateMany({ nit: { $in: nitsToActivate } }, { $set: { isActive: true } });
     if (nitsToBlock.length > 0) await this.userModel.updateMany({ nit: { $in: nitsToBlock } }, { $set: { isActive: false } });

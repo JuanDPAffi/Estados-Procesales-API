@@ -9,15 +9,9 @@ import { Inmobiliaria, InmobiliariaDocument } from '../../inmobiliaria/schema/in
 import { SalesTeam, SalesTeamDocument } from '../../comercial/schemas/sales-team.schema';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
 import { ValidRoles } from '../../auth/schemas/user.schema';
-import { 
-  ProcesoDetalleDto, 
-  ProcesoResumenDto, 
-  ProcesosPorIdentificacionResponse, 
-  InformeCedulaItem, 
-  MedidaCautelarDto, 
-  InformeInmobiliariaRaw, 
-  InformeInmobiliariaDto 
-} from '../dto/redelex.dto';
+import { ProcesoDetalleDto, ProcesoResumenDto, ProcesosPorIdentificacionResponse, InformeCedulaItem, MedidaCautelarDto, InformeInmobiliariaRaw, InformeInmobiliariaDto } from '../dto/redelex.dto';
+import { CambioEtapa, CambioEtapaDocument } from '../schemas/cambio-etapa.schema';
+import { MsGraphMailAdapter } from '../../mail/adapters/ms-graph-mail.adapter';
 
 @Injectable()
 export class RedelexService {
@@ -37,12 +31,52 @@ export class RedelexService {
     private readonly inmoModel: Model<InmobiliariaDocument>,
     @InjectModel(SalesTeam.name)
     private readonly salesTeamModel: Model<SalesTeamDocument>,
+    @InjectModel(CambioEtapa.name)
+    private readonly cambioEtapaModel: Model<CambioEtapaDocument>,
+    private readonly msGraphMailAdapter: MsGraphMailAdapter,
     private readonly configService: ConfigService,
   ) {
     this.apiKey = this.configService.get<string>('REDELEX_API_KEY') || '';
     if (!this.apiKey) {
       this.logger.warn('REDELEX_API_KEY no está configurado');
     }
+  }
+
+  private getClienteClase(internalClass: string): string {
+    if (!internalClass) return '';
+    const c = internalClass.toUpperCase().trim();
+    if (c.includes('EJECUTIVO SINGULAR')) return 'EJECUTIVO';
+    if (c.includes('VERBAL SUMARIO')) return 'RESTITUCIÓN';
+    return c;
+  }
+
+  private getClienteEtapa(internalStage: string): string {
+    if (!internalStage) return 'DESCONOCIDO';
+    const s = internalStage.toUpperCase().trim();
+
+    if (s.includes('ALISTAMIENTO') || s.includes('DOCUMENTACION') || s.includes('ASIGNACION')) { return 'RECOLECCION Y VALIDACION DOCUMENTAL'; }    
+    
+    if (s === 'DEMANDA') return 'DEMANDA';
+    
+    if (s === 'MANDAMIENTO') return 'MANDAMIENTO DE PAGO';
+    
+    if (s === 'ADMISION') return 'ADMISION DEMANDA';
+    
+    if (['NOTIFICACION', 'EMPLAZAMIENTO'].includes(s)) return 'NOTIFICACION';
+    
+    if (['EXCEPCIONES', 'CONTESTACION'].includes(s)) return 'EXCEPCIONES';
+    
+    if (s === 'AUDIENCIA') return 'AUDIENCIA';
+    
+    if (s === 'SENTENCIA') return 'SENTENCIA';
+    
+    if (['LIQUIDACION', 'AVALUO', 'REMATE'].includes(s)) return 'LIQUIDACION';
+    
+    if (['LANZAMIENTO', 'ENTREGA'].includes(s)) return 'LANZAMIENTO';
+    
+    if (['TERMINACION', 'TERMINADO', 'DESISTIMIENTO'].includes(s)) return 'TERMINACION';
+
+    return s;
   }
 
   public async calculateAllowedNits(user: any): Promise<{ isGlobal: boolean, allowedNits: string[] }> {
@@ -366,19 +400,127 @@ export class RedelexService {
     return mapped;
   }
 
+  async sendDailyReports() {
+      // 1. Calcular rango: Ayer completo (00:00:00 - 23:59:59)
+      const hoy = new Date();
+      const ayerInicio = new Date(hoy);
+      ayerInicio.setDate(hoy.getDate() - 1);
+      ayerInicio.setHours(0, 0, 0, 0);
+
+      const ayerFin = new Date(ayerInicio);
+      ayerFin.setHours(23, 59, 59, 999);
+
+      const fechaReporteLegible = ayerInicio.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
+      this.logger.log(`Generando reportes del rango: ${ayerInicio.toISOString()} - ${ayerFin.toISOString()}`);
+
+      // 2. Obtener usuarios válidos
+      const inmosConUsuario = await this.inmoModel.find({ 
+          isActive: true,
+          emailRegistrado: { 
+            $exists: true, 
+            $ne: null, 
+            $nin: ["", " ", "null", "undefined", "NULL"] 
+          } 
+      }).select('nit emailRegistrado nombreInmobiliaria').lean();
+
+      if (inmosConUsuario.length === 0) {
+        return { message: 'No hay usuarios registrados válidos para enviar reportes.' };
+      }
+
+      // 3. Buscar cambios por FECHA CREACIÓN dentro del rango de ayer
+      // IMPORTANTE: No filtramos por 'reportado: false' para garantizar que 
+      // si el endpoint se ejecuta varias veces hoy, el reporte siga siendo consistente con el historial de ayer.
+      // Sin embargo, si quieres evitar reenvíos el mismo día, descomenta la línea 'reportado: false'.
+      // Para trazabilidad estricta, mejor dejarlo basado en fechas o manejar un flag diario.
+      // Propuesta híbrida: Usar flag reportado para no spamear hoy, pero el rango asegura que es contenido viejo.
+      
+      const cambios = await this.cambioEtapaModel.find({
+          createdAt: { $gte: ayerInicio, $lte: ayerFin },
+          reportado: false // Mantenemos esto para evitar enviar doble correo si el cron falla y se reintenta
+      });
+
+      const cambiosPorNit = new Map<string, any[]>();
+      
+      // Inicializar todos (para enviar "Sin novedades" si aplica)
+      inmosConUsuario.forEach(inmo => {
+          cambiosPorNit.set(inmo.nit, []);
+      });
+
+      cambios.forEach(cambio => {
+          if (cambiosPorNit.has(cambio.demandanteIdentificacion)) {
+              cambiosPorNit.get(cambio.demandanteIdentificacion).push(cambio);
+          }
+      });
+
+      let enviados = 0;
+      const idsReportados = [];
+
+      for (const inmo of inmosConUsuario) {
+        const listaCambios = cambiosPorNit.get(inmo.nit) || [];
+        const emailDestino = inmo.emailRegistrado;
+
+        if (this.isValidEmail(emailDestino)) {
+            try {
+              // Enviamos el correo (pasando la fecha para el asunto)
+              await this.msGraphMailAdapter.sendDailyReportEmail(
+                  emailDestino, 
+                  listaCambios, 
+                  fechaReporteLegible 
+              );
+              
+              this.logger.log(`Reporte (${fechaReporteLegible}) enviado a ${emailDestino} - Cambios: ${listaCambios.length}`);
+              enviados++;
+              
+              // Recolectar IDs para marcar
+              listaCambios.forEach(c => idsReportados.push(c._id));
+
+            } catch (e) {
+              this.logger.error(`Error enviando a ${emailDestino}`, e.response?.data || e.message);
+            }
+        }
+      }
+
+      // 4. Marcar como reportados (Para trazabilidad y no reenvío inmediato)
+      // Se usa reportedAt para que el índice TTL de Mongo se encargue de borrarlo en 30 días
+      if (idsReportados.length > 0) {
+          await this.cambioEtapaModel.updateMany(
+            { _id: { $in: idsReportados } }, 
+            { $set: { reportado: true, reportedAt: new Date() } }
+          );
+      }
+      
+      return { 
+          fechaReporte: fechaReporteLegible,
+          totalUsuarios: inmosConUsuario.length,
+          correosEnviados: enviados,
+          cambiosProcesados: idsReportados.length
+      };
+  }
+
+  private isValidEmail(email: string): boolean {
+      return email && email.includes('@') && !['null', 'undefined'].includes(email.toLowerCase());
+  }
+
   async syncInformeCedulaProceso(informeId: number) {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
+
     const data = await this.secureRedelexGet(
       `${this.baseUrl}/Informes/GetInformeJson`,
       { token: this.apiKey, informeId },
     );
+
+    const redelexTime = data.redelex_ms || 0;
+
     const raw = data.jsonString as string;
-    if (!raw) return { total: 0, upserted: 0, modified: 0, deleted: 0 };
+    if (!raw) return { total: 0, upserted: 0, modified: 0, deleted: 0, redelex_ms: redelexTime };
+    
     const items = JSON.parse(raw) as InformeCedulaItem[];
     const procesosMap = new Map<number, any>();
+
     for (const item of items) {
       const pId = Math.round(item['ID Proceso']);
       const rol = String(item['Sujeto Intervencion'] ?? '').toUpperCase().trim();
+
       if (!procesosMap.has(pId)) {
         procesosMap.set(pId, {
           procesoId: pId,
@@ -386,10 +528,14 @@ export class RedelexService {
           codigoAlterno: String(item['Codigo Alterno'] ?? '').trim(),
           claseProceso: String(item['Clase Proceso'] ?? '').trim(),
           etapaProcesal: String(item['Etapa Procesal'] ?? '').trim(),
-          demandadoNombre: '', demandadoIdentificacion: '',
-          demandanteNombre: '', demandanteIdentificacion: ''
+          despacho: String(item['Despacho'] ?? '').trim(), 
+          demandadoNombre: '', 
+          demandadoIdentificacion: '',
+          demandanteNombre: '', 
+          demandanteIdentificacion: ''
         });
       }
+
       const proceso = procesosMap.get(pId);
       if (rol === 'DEMANDANTE') {
         proceso.demandanteNombre = String(item['Sujeto Nombre'] ?? '').trim();
@@ -399,21 +545,87 @@ export class RedelexService {
         proceso.demandadoIdentificacion = String(item['Sujeto Identificacion'] ?? '').trim();
       }
     }
+
     const procesosUnicos = Array.from(procesosMap.values());
-    let upserted = 0; let modified = 0; const BATCH_SIZE = 1000;
+    let upserted = 0; 
+    let modified = 0; 
+    const BATCH_SIZE = 1000;
+    
+    const cambiosDetectados = [];
+
     for (let i = 0; i < procesosUnicos.length; i += BATCH_SIZE) {
       const chunk = procesosUnicos.slice(i, i + BATCH_SIZE);
+      const idsChunk = chunk.map(p => p.procesoId);
+      
+      // Consultamos el estado ACTUAL en BD antes de actualizar
+      const procesosExistentes = await this.cedulaProcesoModel.find({
+        procesoId: { $in: idsChunk }
+      }).select('procesoId etapaProcesal').lean();
+
+      const mapaExistentes = new Map(procesosExistentes.map(p => [p.procesoId, p]));
+
+      for (const pNuevo of chunk) {
+        const pViejo = mapaExistentes.get(pNuevo.procesoId);
+
+        // LÓGICA DE DETECCIÓN INTELIGENTE DE CAMBIOS
+        if (pViejo) {
+          const etapaAnteriorCliente = this.getClienteEtapa(pViejo.etapaProcesal);
+          const etapaActualCliente = this.getClienteEtapa(pNuevo.etapaProcesal);
+          
+          // 1. ¿Es un cambio visual para el cliente? (Ej: Documentación -> Asignación NO es cambio)
+          const esCambioVisual = etapaAnteriorCliente !== etapaActualCliente;
+
+          // 2. ¿La nueva etapa es reportable? (Terminación NO se notifica)
+          const esReportable = etapaActualCliente !== 'TERMINACION';
+
+          const esInicioProceso = etapaAnteriorCliente === 'DESCONOCIDO' && etapaActualCliente === 'RECOLECCION Y VALIDACION DOCUMENTAL';
+
+          if (esCambioVisual && esReportable && !esInicioProceso) {
+             cambiosDetectados.push({
+                procesoId: pNuevo.procesoId,
+                numeroRadicacion: pNuevo.numeroRadicacion,
+                demandanteIdentificacion: pNuevo.demandanteIdentificacion,
+                demandadoNombre: pNuevo.demandadoNombre,
+                demandadoIdentificacion: pNuevo.demandadoIdentificacion,
+                claseProceso: this.getClienteClase(pNuevo.claseProceso),
+                despacho: pNuevo.despacho || 'No registrado',
+                etapaAnterior: etapaAnteriorCliente,
+                etapaActual: etapaActualCliente,
+                reportado: false
+             });
+          }
+        }
+      }
+
+      // Upsert en la colección principal (Mantiene los datos crudos/técnicos de Redelex)
       const bulkOps = chunk.map((p) => ({
         updateOne: { filter: { procesoId: p.procesoId }, update: { $set: p }, upsert: true },
       }));
+
       if (bulkOps.length > 0) {
         const res = await this.cedulaProcesoModel.bulkWrite(bulkOps, { ordered: false });
-        upserted += res.upsertedCount; modified += res.modifiedCount;
+        upserted += res.upsertedCount; 
+        modified += res.modifiedCount;
       }
     }
+
+    // Guardamos los cambios detectados (ya filtrados y traducidos)
+    if (cambiosDetectados.length > 0) {
+      await this.cambioEtapaModel.insertMany(cambiosDetectados);
+      this.logger.log(`Se registraron ${cambiosDetectados.length} cambios de etapa relevantes para cliente.`);
+    }
+
     const idsProcesados = Array.from(procesosMap.keys());
     const deleteResult = await this.cedulaProcesoModel.deleteMany({ procesoId: { $nin: idsProcesados } });
-    return { total: procesosUnicos.length, upserted, modified, deleted: deleteResult.deletedCount ?? 0 };
+
+    return { 
+      total: procesosUnicos.length, 
+      upserted, 
+      modified, 
+      deleted: deleteResult.deletedCount ?? 0,
+      cambiosDetectados: cambiosDetectados.length,
+      redelex_ms: redelexTime
+    };
   }
 
   async getMisProcesosLive(userNit: string, nombreInmobiliaria: string = '') {
@@ -495,14 +707,35 @@ export class RedelexService {
     const campoUbicacionContrato = camposPersonalizados.find((c: any) => String(c.Nombre || '').toUpperCase().includes('UBICACION CONTRATO'));
     const calif = p.CalificacionContingenciaProceso || {};
     return {
-      sujetos: sujetos, idProceso: p.ProcesoId ?? null, numeroRadicacion: p.Radicacion ?? null, codigoAlterno: p.CodigoAlterno ?? null,
-      claseProceso: p.ClaseProceso ?? null, etapaProcesal: p.Etapa ?? null, estado: p.Estado ?? null, regional: p.Regional ?? null, tema: p.Tema ?? null,
-      despacho: p.DespachoConocimiento ?? null, despachoOrigen: p.DespachoOrigen ?? null, fechaAdmisionDemanda: p.FechaAdmisionDemanda ?? null,
-      fechaCreacion: p.FechaCreacion ?? null, fechaEntregaAbogado: p.FechaEntregaAbogado ?? null, fechaRecepcionProceso: p.FechaRecepcionProceso ?? null,
-      ubicacionContrato: campoUbicacionContrato?.Valor?.trim() ?? null, camposPersonalizados: camposPersonalizados, fechaAceptacionSubrogacion: null,
-      fechaPresentacionSubrogacion: null, motivoNoSubrogacion: null, calificacion: calif.Calificacion ?? null, sentenciaPrimeraInstanciaResultado: p.SentenciaPrimeraInstancia ?? null,
-      sentenciaPrimeraInstanciaFecha: p.FechaSentenciaPrimeraInstancia ?? null, medidasCautelares: medidasValidas, ultimaActuacionFecha: ultimaActuacionPrincipal?.FechaActuacion ?? null,
-      ultimaActuacionTipo: ultimaActuacionPrincipal?.Tipo ?? null, ultimaActuacionObservacion: ultimaActuacionPrincipal?.Observacion ?? null, actuacionesRecientes: actuacionesRecientesList, abogados: abogados,
+      sujetos: sujetos, 
+      idProceso: p.ProcesoId ?? null, 
+      numeroRadicacion: p.Radicacion ?? null, 
+      codigoAlterno: p.CodigoAlterno ?? null,
+      claseProceso: p.ClaseProceso ?? null, 
+      etapaProcesal: p.Etapa ?? null, 
+      estado: p.Estado ?? null, 
+      regional: p.Regional ?? null, 
+      tema: p.Tema ?? null,
+      despacho: p.DespachoConocimiento ?? null, 
+      despachoOrigen: p.DespachoOrigen ?? null, 
+      fechaAdmisionDemanda: p.FechaAdmisionDemanda ?? null,
+      fechaCreacion: p.FechaCreacion ?? null, 
+      fechaEntregaAbogado: p.FechaEntregaAbogado ?? null, 
+      fechaRecepcionProceso: p.FechaRecepcionProceso ?? null,
+      ubicacionContrato: campoUbicacionContrato?.Valor?.trim() ?? null, 
+      camposPersonalizados: camposPersonalizados, 
+      fechaAceptacionSubrogacion: null,
+      fechaPresentacionSubrogacion: null, 
+      motivoNoSubrogacion: null, 
+      calificacion: calif.Calificacion ?? null, 
+      sentenciaPrimeraInstanciaResultado: p.SentenciaPrimeraInstancia ?? null,
+      sentenciaPrimeraInstanciaFecha: p.FechaSentenciaPrimeraInstancia ?? null, 
+      medidasCautelares: medidasValidas, 
+      ultimaActuacionFecha: ultimaActuacionPrincipal?.FechaActuacion ?? null,
+      ultimaActuacionTipo: ultimaActuacionPrincipal?.Tipo ?? null, 
+      ultimaActuacionObservacion: ultimaActuacionPrincipal?.Observacion ?? null, 
+      actuacionesRecientes: actuacionesRecientesList, 
+      abogados: abogados,
     };
   }
 }

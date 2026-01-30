@@ -79,4 +79,4 @@ export class Inmobiliaria {
 }
 
 export const InmobiliariaSchema = SchemaFactory.createForClass(Inmobiliaria);
-InmobiliariaSchema.index({ nit: 1, codigo: 1 }, { unique: true });
+InmobiliariaSchema.index({ codigo: 1 }, { unique: true });

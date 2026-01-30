@@ -493,6 +493,82 @@ export class MsGraphMailAdapter {
     `;
   }
 
+  async sendDailyReportEmail(to: string, cambios: any[], fechaReporte: string = 'Ayer'): Promise<void> {
+      if (!this.fromAddress) throw new Error('MAIL_DEFAULT_FROM no configurado');
+      const accessToken = await this.getAccessToken();
+      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.fromAddress)}/sendMail`;
+
+      const hasChanges = cambios.length > 0;
+      const html = this.buildDailyReportHtml(cambios, fechaReporte); // Pasamos fecha al HTML también
+
+      const message = {
+        message: {
+          // Asunto dinámico: "📋 Reporte de Cambios (28 de enero) - Affi..."
+          subject: hasChanges 
+            ? `📋 Reporte de Cambios (${fechaReporte}) - ${this.brandName}`
+            : `✅ Sin novedades (${fechaReporte}) - ${this.brandName}`,
+          body: { contentType: 'HTML', content: html },
+          from: { emailAddress: { address: this.fromAddress } },
+          toRecipients: [{ emailAddress: { address: to } }],
+        },
+        saveToSentItems: true,
+      };
+
+      await axios.post(url, message, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      });
+  }
+
+  private buildDailyReportHtml(cambios: any[], fechaReporte: string): string {
+      const filas = cambios.map(c => `
+        <tr>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px;">${c.numeroRadicacion}</td>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px;">${c.demandadoNombre} <br/> <span style="color:#666; font-size:10px;">${c.demandadoIdentificacion}</span></td>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px;">${c.despacho}</td>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px;">${c.claseProceso}</td>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px; color:#e11d48;">${c.etapaAnterior}</td>
+          <td style="padding:8px; border-bottom:1px solid #ddd; font-size:12px; color:#16a34a; font-weight:bold;">${c.etapaActual}</td>
+        </tr>
+      `).join('');
+
+      const tabla = `
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+          <thead style="background-color: #f3f4f6;">
+            <tr>
+              <th style="padding:8px; text-align:left; font-size:12px;">Radicado</th>
+              <th style="padding:8px; text-align:left; font-size:12px;">Demandado</th>
+              <th style="padding:8px; text-align:left; font-size:12px;">Juzgado</th>
+              <th style="padding:8px; text-align:left; font-size:12px;">Clase</th>
+              <th style="padding:8px; text-align:left; font-size:12px;">Etapa Anterior</th>
+              <th style="padding:8px; text-align:left; font-size:12px;">Etapa Actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas}
+          </tbody>
+        </table>
+      `;
+
+      const mensajeSinCambios = `
+        <div style="padding: 20px; text-align: center; background-color: #f9fafb; border-radius: 8px;">
+          <p style="color: #4b5563; margin: 0;">No se registraron cambios de etapa procesal en las últimas 24 horas.</p>
+        </div>
+      `;
+
+      return `
+        <!DOCTYPE html>
+        <html>
+        <body style="font-family: sans-serif; color: #1f2937;">
+          <h2>Reporte de Cambios Procesales - ${fechaReporte}</h2>
+          ${cambios.length > 0 ? tabla : mensajeSinCambios}
+          <p style="font-size: 11px; color: #9ca3af; margin-top: 20px;">
+            Generado automáticamente por ${this.brandName}
+          </p>
+        </body>
+        </html>
+      `;
+  }
+
   private buildPasswordResetEmailHtml(name: string, resetLink: string): string {
     return `
     <!DOCTYPE html>

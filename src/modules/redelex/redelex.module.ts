@@ -9,6 +9,8 @@ import { AuthModule } from '../auth/auth.module';
 import { InmobiliariaModule } from '../inmobiliaria/inmobiliaria.module';
 import { ComercialModule } from '../comercial/comercial.module';
 import { RedelexMetricsInterceptor } from '../../common/interceptors/redelex-metrics.interceptor';
+import { CambioEtapa, CambioEtapaSchema } from './schemas/cambio-etapa.schema';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -16,10 +18,12 @@ import { RedelexMetricsInterceptor } from '../../common/interceptors/redelex-met
       { name: RedelexToken.name, schema: RedelexTokenSchema },
       { name: CedulaProceso.name, schema: CedulaProcesoSchema },
       { name: ApiTelemetry.name, schema: ApiTelemetrySchema },
+      { name: CambioEtapa.name, schema: CambioEtapaSchema },
     ]),
     AuthModule,
     ComercialModule,
-    InmobiliariaModule 
+    InmobiliariaModule,
+    MailModule
   ],
   controllers: [RedelexController],
   providers: [RedelexService, RedelexMetricsInterceptor],

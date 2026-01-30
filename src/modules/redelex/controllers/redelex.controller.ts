@@ -77,6 +77,13 @@ export class RedelexController {
     };
   }
 
+  @Post('trigger-daily-reports')
+  @Permissions(PERMISSIONS.SYSTEM_CONFIG)
+  async triggerDailyReports() {
+    const result = await this.redelexService.sendDailyReports();
+    return { success: true, ...result };
+  }
+
   @Get('proceso/:id')
   async getProcesoDetalle(@Param('id', ParseIntPipe) id: number, @Req() req) {
     const user = req.user;

@@ -7,6 +7,6 @@ import { MsGraphMailAdapter } from './adapters/ms-graph-mail.adapter';
     MailService,
     MsGraphMailAdapter,
   ],
-  exports: [MailService],
+  exports: [MailService, MsGraphMailAdapter],
 })
 export class MailModule {}

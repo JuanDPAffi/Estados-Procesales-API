@@ -401,100 +401,110 @@ export class RedelexService {
   }
 
   async sendDailyReports() {
-      // 1. Calcular rango: Ayer completo (00:00:00 - 23:59:59)
-      const hoy = new Date();
-      const ayerInicio = new Date(hoy);
-      ayerInicio.setDate(hoy.getDate() - 1);
-      ayerInicio.setHours(0, 0, 0, 0);
+    this.logger.log('Iniciando proceso de generación de reportes diarios...');
 
-      const ayerFin = new Date(ayerInicio);
-      ayerFin.setHours(23, 59, 59, 999);
+    const hoy = new Date();
+    const ayerInicio = new Date(hoy);
+    ayerInicio.setDate(hoy.getDate() - 1);
+    ayerInicio.setHours(0, 0, 0, 0);
 
-      const fechaReporteLegible = ayerInicio.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
-      this.logger.log(`Generando reportes del rango: ${ayerInicio.toISOString()} - ${ayerFin.toISOString()}`);
+    const ayerFin = new Date(ayerInicio);
+    ayerFin.setHours(23, 59, 59, 999);
+    
+    const fechaReporteLegible = ayerInicio.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
 
-      // 2. Obtener usuarios válidos
-      const inmosConUsuario = await this.inmoModel.find({ 
-          isActive: true,
-          emailRegistrado: { 
-            $exists: true, 
-            $ne: null, 
-            $nin: ["", " ", "null", "undefined", "NULL"] 
-          } 
-      }).select('nit emailRegistrado nombreInmobiliaria').lean();
+    const inmosConUsuario = await this.inmoModel.find({ 
+        isActive: true,
+        emailRegistrado: { $exists: true, $ne: null, $nin: ["", " ", "null", "undefined", "NULL"] } 
+    }).select('nit emailRegistrado').lean();
 
-      if (inmosConUsuario.length === 0) {
-        return { message: 'No hay usuarios registrados válidos para enviar reportes.' };
-      }
+    if (inmosConUsuario.length === 0) {
+        this.logger.warn('No se encontraron usuarios activos para enviar reportes.');
+        return { message: 'Sin destinatarios válidos.' };
+    }
 
-      // 3. Buscar cambios por FECHA CREACIÓN dentro del rango de ayer
-      // IMPORTANTE: No filtramos por 'reportado: false' para garantizar que 
-      // si el endpoint se ejecuta varias veces hoy, el reporte siga siendo consistente con el historial de ayer.
-      // Sin embargo, si quieres evitar reenvíos el mismo día, descomenta la línea 'reportado: false'.
-      // Para trazabilidad estricta, mejor dejarlo basado en fechas o manejar un flag diario.
-      // Propuesta híbrida: Usar flag reportado para no spamear hoy, pero el rango asegura que es contenido viejo.
-      
-      const cambios = await this.cambioEtapaModel.find({
-          createdAt: { $gte: ayerInicio, $lte: ayerFin },
-          reportado: false // Mantenemos esto para evitar enviar doble correo si el cron falla y se reintenta
-      });
+    const cambiosRaw = await this.cambioEtapaModel.find({
+        createdAt: { $gte: ayerInicio, $lte: ayerFin },
+        reportado: false 
+    }).sort({ createdAt: 1 }).lean();
 
-      const cambiosPorNit = new Map<string, any[]>();
-      
-      // Inicializar todos (para enviar "Sin novedades" si aplica)
-      inmosConUsuario.forEach(inmo => {
-          cambiosPorNit.set(inmo.nit, []);
-      });
+    if (cambiosRaw.length === 0) {
+        this.logger.log('No hubo cambios procesales en el día de ayer.');
+    }
 
-      cambios.forEach(cambio => {
-          if (cambiosPorNit.has(cambio.demandanteIdentificacion)) {
-              cambiosPorNit.get(cambio.demandanteIdentificacion).push(cambio);
-          }
-      });
+    const cambiosPorNit = new Map<string, Map<number, any>>();
 
-      let enviados = 0;
-      const idsReportados = [];
+    inmosConUsuario.forEach(inmo => {
+        cambiosPorNit.set(inmo.nit, new Map<number, any>());
+    });
 
-      for (const inmo of inmosConUsuario) {
-        const listaCambios = cambiosPorNit.get(inmo.nit) || [];
+    cambiosRaw.forEach(cambio => {
+        const nit = cambio.demandanteIdentificacion;
+        const pid = cambio.procesoId;
+
+        if (cambiosPorNit.has(nit)) {
+            const cambiosDeInmo = cambiosPorNit.get(nit);
+
+            if (!cambiosDeInmo.has(pid)) {
+                cambiosDeInmo.set(pid, {
+                    idsParaMarcar: [cambio._id],
+                    numeroRadicacion: cambio.numeroRadicacion,
+                    demandadoNombre: cambio.demandadoNombre,
+                    demandadoIdentificacion: cambio.demandadoIdentificacion,
+                    despacho: cambio.despacho,
+                    claseProceso: cambio.claseProceso,
+                    etapaAnterior: cambio.etapaAnterior,
+                    etapaActual: cambio.etapaActual
+                });
+            } else {
+                const acumulado = cambiosDeInmo.get(pid);
+                acumulado.etapaActual = cambio.etapaActual;
+                acumulado.idsParaMarcar.push(cambio._id);
+            }
+        }
+    });
+
+    let enviados = 0;
+    const todosLosIdsParaMarcar = [];
+
+    for (const inmo of inmosConUsuario) {
+        const mapaCambios = cambiosPorNit.get(inmo.nit);
+        const listaConsolidada = Array.from(mapaCambios.values());
         const emailDestino = inmo.emailRegistrado;
 
         if (this.isValidEmail(emailDestino)) {
             try {
-              // Enviamos el correo (pasando la fecha para el asunto)
-              await this.msGraphMailAdapter.sendDailyReportEmail(
-                  emailDestino, 
-                  listaCambios, 
-                  fechaReporteLegible 
-              );
-              
-              this.logger.log(`Reporte (${fechaReporteLegible}) enviado a ${emailDestino} - Cambios: ${listaCambios.length}`);
-              enviados++;
-              
-              // Recolectar IDs para marcar
-              listaCambios.forEach(c => idsReportados.push(c._id));
+                await this.msGraphMailAdapter.sendDailyReportEmail(
+                    emailDestino, 
+                    listaConsolidada, 
+                    fechaReporteLegible 
+                );
+                
+                enviados++;
+                
+                listaConsolidada.forEach(c => todosLosIdsParaMarcar.push(...c.idsParaMarcar));
 
             } catch (e) {
-              this.logger.error(`Error enviando a ${emailDestino}`, e.response?.data || e.message);
+                this.logger.error(`Fallo envío a ${emailDestino} (NIT: ${inmo.nit})`, e.message);
             }
         }
-      }
+    }
 
-      // 4. Marcar como reportados (Para trazabilidad y no reenvío inmediato)
-      // Se usa reportedAt para que el índice TTL de Mongo se encargue de borrarlo en 30 días
-      if (idsReportados.length > 0) {
-          await this.cambioEtapaModel.updateMany(
-            { _id: { $in: idsReportados } }, 
+    if (todosLosIdsParaMarcar.length > 0) {
+        const updateResult = await this.cambioEtapaModel.updateMany(
+            { _id: { $in: todosLosIdsParaMarcar } }, 
             { $set: { reportado: true, reportedAt: new Date() } }
-          );
-      }
-      
-      return { 
-          fechaReporte: fechaReporteLegible,
-          totalUsuarios: inmosConUsuario.length,
-          correosEnviados: enviados,
-          cambiosProcesados: idsReportados.length
-      };
+        );
+        this.logger.log(`Registros marcados como reportados: ${updateResult.modifiedCount}`);
+    }
+    
+    return { 
+        success: true,
+        fechaReporte: fechaReporteLegible,
+        usuariosProcesados: inmosConUsuario.length,
+        correosEnviados: enviados,
+        registrosBaseDeDatosAfectados: todosLosIdsParaMarcar.length 
+    };
   }
 
   private isValidEmail(email: string): boolean {

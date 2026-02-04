@@ -85,7 +85,7 @@ export class SupportService {
   async searchHubSpotContact(email: string) {
     const searchPayload = {
       filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email }] }],
-      properties: ['firstname', 'lastname', 'email', 'phone'],
+      properties: ['firstname', 'lastname', 'email', 'cargo_affi', 'phone'],
       limit: 1
     };
     try {
@@ -93,12 +93,14 @@ export class SupportService {
       if (response.data.total > 0) {
         const contact = response.data.results[0];
         const fullName = `${contact.properties.firstname || ''} ${contact.properties.lastname || ''}`.trim();
+        const cargo = contact.properties.cargo_affi || '';
         return { 
           found: true, 
           id: contact.id, 
           name: fullName, 
           email: contact.properties.email, 
-          phone: contact.properties.phone
+          phone: contact.properties.phone,
+          cargo: cargo
         };
       }
       return { found: false };
@@ -139,11 +141,14 @@ export class SupportService {
         // hubspot_owner_id: this.DEFAULT_OWNER_ID,
         grupo_de_atencion: "Servicio al cliente",
         tipo_de_llamada: dto.callType,
+        subtema: "Llamada Estados Procesales",
         area_origen_transferencia: dto.transferArea || "",
         consulta: dto.query,
         identificacion_consultado: dto.inquilinoIdentificacion || "",
         nombre_consultado: dto.inquilinoNombre || "",
         numero_cuenta_consultado: dto.cuenta || "", 
+        clase_procesal: dto.claseProceso || "",
+        etapa_procesal: dto.etapaProcesal || "",
         hs_pipeline: "0",
         hs_pipeline_stage: "2"
       },
@@ -176,13 +181,11 @@ export class SupportService {
     };
 
     const lookupEmail = user.ticketEmail || user.email;
-
+    const etapa = dto.metadata?.etapa || '';
+    const clase = dto.metadata?.clase || '';
     const subtemaForm = (dto.subject || '').trim();
-
     const isLegal = !!dto.metadata;
-
     const ticketSubject = `Estados Procesales - ${subtemaForm}`;
-
     const contactId = await this.findContactId(lookupEmail, headers);
 
     let companyId = null;
@@ -208,14 +211,12 @@ export class SupportService {
     let headerInfo = '';
     if (isLegal) {
       headerInfo = `
-  =================
-  APOYO JURÍDICO
-  =================
+  ========================
+  INFORMACIÓN DEL PROCESO
+  ========================
   ID Proceso: ${dto.metadata.procesoId || 'N/A'}
   Radicado: ${dto.metadata.radicado || 'N/A'}
   Cuenta: ${dto.metadata.cuenta || 'N/A'}
-  Clase: ${dto.metadata.clase || 'N/A'}
-  Etapa Actual: ${dto.metadata.etapa || 'N/A'}
   --------------------------------
       `;
     } else {
@@ -244,8 +245,9 @@ export class SupportService {
         correo: user.email,
         correo_de_respuesta: lookupEmail,
         usuario: user.name,
+        clase_procesal: clase,
+        etapa_procesal: etapa,
         // hubspot_owner_id: "81381349",
-
         hs_pipeline_stage: '1',
         hs_ticket_priority: 'HIGH',
         plataforma_estados_procesales: 'true',

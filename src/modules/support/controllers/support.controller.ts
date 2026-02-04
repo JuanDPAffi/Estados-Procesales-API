@@ -1,9 +1,3 @@
-/*
-  Cambios (30-12-2025) - Santiago Obando:
-  - Se agregó el mapeo de `ticketEmail` para pasar el email enviado en el formulario
-    (`createDto.email`) hacia el servicio de soporte.
-  - Motivo: permitir que el email ingresado en el modal sea el reply-to en HubSpot/CMR.
-*/
 import { Controller, Post, Get, Query, Body, UseGuards, Req } from '@nestjs/common';
 import { SupportService } from '../services/support.service';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
@@ -11,11 +5,15 @@ import { SystemOrJwtGuard } from '../../../common/guards/system-or-jwt.guard';
 import { Permissions } from '../../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
 import { CreateCallTicketDto } from '../dto/call-ticket.dto';
+import { InmobiliariaService } from '../../inmobiliaria/services/inmobiliaria.service';
 
 @Controller('support')
 @UseGuards(SystemOrJwtGuard)
 export class SupportController {
-  constructor(private readonly supportService: SupportService) {}
+  constructor(
+    private readonly supportService: SupportService,
+    private readonly inmoService: InmobiliariaService
+  ) {}
 
   @Post('ticket')
   async createTicket(@Req() req, @Body() createDto: CreateTicketDto) {
@@ -37,7 +35,16 @@ export class SupportController {
   @Get('hubspot/search-company')
   @Permissions(PERMISSIONS.CALL_CREATE)
   async searchCompany(@Query('nit') nit: string) {
-    return this.supportService.searchHubSpotCompany(nit);
+    const company = await this.inmoService.findOneByNit(nit);
+    
+    if (!company) {
+        return { found: false };
+    }
+
+    return {
+        found: true,
+        ...company.toObject()
+    };
   }
 
   @Post('call-ticket')

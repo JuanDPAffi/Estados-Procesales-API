@@ -55,4 +55,12 @@ export class CreateCallTicketDto {
   @IsString()
   @IsOptional()
   inquilinoNombre?: string;
+
+  @IsString()
+  @IsOptional()
+  claseProceso?: string;
+
+  @IsString()
+  @IsOptional()
+  etapaProcesal?: string;
 }

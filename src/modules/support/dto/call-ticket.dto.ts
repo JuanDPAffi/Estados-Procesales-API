@@ -63,4 +63,8 @@ export class CreateCallTicketDto {
   @IsString()
   @IsOptional()
   etapaProcesal?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  response: string;
 }

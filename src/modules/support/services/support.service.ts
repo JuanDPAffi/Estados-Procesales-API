@@ -1,8 +1,3 @@
-/*
-  Cambios (30-12-2025) - Santiago Obando:
-  - Ahora el servicio prioriza `user.ticketEmail || user.email` al buscar contactos y empresas en HubSpot.
-  - Motivo: usar el email ingresado en el formulario como contact/empresa lookup y reply-to.
-*/
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
@@ -138,12 +133,13 @@ export class SupportService {
       properties: {
         subject: subject,
         hs_ticket_category: "Estados Procesales",
-        // hubspot_owner_id: this.DEFAULT_OWNER_ID,
+        hubspot_owner_id: 88047681, // ID de Mayra Alejandra Rodriguez mayra.rodriguez@affi.net
         grupo_de_atencion: "Servicio al cliente",
         tipo_de_llamada: dto.callType,
         subtema: "Llamada Estados Procesales",
         area_origen_transferencia: dto.transferArea || "",
-        consulta: dto.query,
+        content: dto.query,
+        descripcion_respuesta: dto.response,
         identificacion_consultado: dto.inquilinoIdentificacion || "",
         nombre_consultado: dto.inquilinoNombre || "",
         numero_cuenta_consultado: dto.cuenta || "", 

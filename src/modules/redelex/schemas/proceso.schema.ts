@@ -1,11 +1,10 @@
-// cedula-proceso.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type CedulaProcesoDocument = CedulaProceso & Document;
+export type ProcesoDocument = Proceso & Document;
 
 @Schema({ timestamps: true })
-export class CedulaProceso {
+export class Proceso {
   @Prop({ required: true })
   procesoId: number;
 
@@ -37,5 +36,5 @@ export class CedulaProceso {
   updatedAt?: Date;
 }
 
-export const CedulaProcesoSchema = SchemaFactory.createForClass(CedulaProceso);
-CedulaProcesoSchema.index({ procesoId: 1 }, { unique: true });
+export const ProcesoSchema = SchemaFactory.createForClass(Proceso);
+ProcesoSchema.index({ procesoId: 1 }, { unique: true });

@@ -155,7 +155,7 @@ export class RedelexController {
   @Post('sync-informe/:informeId')
   @Permissions(PERMISSIONS.SYSTEM_CONFIG) 
   async syncInformeCedula(@Param('informeId', ParseIntPipe) informeId: number) {
-    const result = await this.redelexService.syncInformeCedulaProceso(informeId);
+    const result = await this.redelexService.syncInformeProceso(informeId);
     
     return { 
         success: true, 

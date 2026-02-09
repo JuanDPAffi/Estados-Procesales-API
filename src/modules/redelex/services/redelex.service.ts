@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import axios from 'axios';
 import { RedelexToken, RedelexTokenDocument } from '../schemas/redelex-token.schema';
-import { CedulaProceso, CedulaProcesoDocument } from '../schemas/cedula-proceso.schema';
+import { Proceso, ProcesoDocument } from '../schemas/proceso.schema';
 import { Inmobiliaria, InmobiliariaDocument } from '../../inmobiliaria/schema/inmobiliaria.schema';
 import { SalesTeam, SalesTeamDocument } from '../../comercial/schemas/sales-team.schema';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
@@ -25,8 +25,8 @@ export class RedelexService {
   constructor(
     @InjectModel(RedelexToken.name)
     private readonly redelexTokenModel: Model<RedelexTokenDocument>,
-    @InjectModel(CedulaProceso.name)
-    private readonly cedulaProcesoModel: Model<CedulaProcesoDocument>,
+    @InjectModel(Proceso.name)
+    private readonly ProcesoModel: Model<ProcesoDocument>,
     @InjectModel(Inmobiliaria.name)
     private readonly inmoModel: Model<InmobiliariaDocument>,
     @InjectModel(SalesTeam.name)
@@ -160,12 +160,12 @@ export class RedelexService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.cedulaProcesoModel.find(query)
+      this.ProcesoModel.find(query)
         .sort({ updatedAt: -1 }) 
         .skip(skip)
         .limit(limit)
         .lean(),
-      this.cedulaProcesoModel.countDocuments(query)
+      this.ProcesoModel.countDocuments(query)
     ]);
 
     return {
@@ -227,7 +227,7 @@ export class RedelexService {
         };
     }
 
-    const docs = await this.cedulaProcesoModel
+    const docs = await this.ProcesoModel
       .find(finalQuery)
       .sort({ updatedAt: -1 });
 
@@ -511,7 +511,7 @@ export class RedelexService {
       return email && email.includes('@') && !['null', 'undefined'].includes(email.toLowerCase());
   }
 
-  async syncInformeCedulaProceso(informeId: number) {
+  async syncInformeProceso(informeId: number) {
     if (!this.apiKey) throw new Error('REDELEX_API_KEY no configurado');
 
     const data = await this.secureRedelexGet(
@@ -568,7 +568,7 @@ export class RedelexService {
       const idsChunk = chunk.map(p => p.procesoId);
       
       // Consultamos el estado ACTUAL en BD antes de actualizar
-      const procesosExistentes = await this.cedulaProcesoModel.find({
+      const procesosExistentes = await this.ProcesoModel.find({
         procesoId: { $in: idsChunk }
       }).select('procesoId etapaProcesal').lean();
 
@@ -613,7 +613,7 @@ export class RedelexService {
       }));
 
       if (bulkOps.length > 0) {
-        const res = await this.cedulaProcesoModel.bulkWrite(bulkOps, { ordered: false });
+        const res = await this.ProcesoModel.bulkWrite(bulkOps, { ordered: false });
         upserted += res.upsertedCount; 
         modified += res.modifiedCount;
       }
@@ -626,7 +626,7 @@ export class RedelexService {
     }
 
     const idsProcesados = Array.from(procesosMap.keys());
-    const deleteResult = await this.cedulaProcesoModel.deleteMany({ procesoId: { $nin: idsProcesados } });
+    const deleteResult = await this.ProcesoModel.deleteMany({ procesoId: { $nin: idsProcesados } });
 
     return { 
       total: procesosUnicos.length, 

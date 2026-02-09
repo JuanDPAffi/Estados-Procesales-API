@@ -50,7 +50,7 @@ export class InmobiliariaService {
   async findAll() {
     const inmos = await this.inmoModel.find().sort({ createdAt: -1 }).lean().exec();
     
-    const nitsWithProcesos = await this.inmoModel.db.collection('cedulaprocesos').distinct('demandanteIdentificacion');
+    const nitsWithProcesos = await this.inmoModel.db.collection('procesos').distinct('demandanteIdentificacion');
     const nitsSet = new Set(nitsWithProcesos);
 
     return inmos.map(inmo => ({
@@ -373,7 +373,7 @@ export class InmobiliariaService {
   async getEstadisticasConProcesos() {
     try {
       const todasInmobiliarias = await this.inmoModel.find().select('nit isActive nombreInmobiliaria').exec();
-      const coleccionProcesos = this.inmoModel.db.collection('cedulaprocesos');
+      const coleccionProcesos = this.inmoModel.db.collection('procesos');
       const totalProcesos = await coleccionProcesos.countDocuments();
 
       if (totalProcesos === 0) {
@@ -445,7 +445,7 @@ export class InmobiliariaService {
 
   async getEstadisticasUsuariosConProcesos() {
     try {
-      const coleccionProcesos = this.inmoModel.db.collection('cedulaprocesos');
+      const coleccionProcesos = this.inmoModel.db.collection('procesos');
       const totalProcesos = await coleccionProcesos.countDocuments();
       
       if (totalProcesos === 0) {

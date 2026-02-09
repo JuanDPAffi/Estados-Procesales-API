@@ -3,7 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { RedelexController } from './controllers/redelex.controller';
 import { RedelexService } from './services/redelex.service';
 import { RedelexToken, RedelexTokenSchema } from './schemas/redelex-token.schema';
-import { CedulaProceso, CedulaProcesoSchema } from './schemas/cedula-proceso.schema';
+import { Proceso, ProcesoSchema } from './schemas/proceso.schema';
 import { ApiTelemetry, ApiTelemetrySchema } from './schemas/api-telemetry.schema';
 import { AuthModule } from '../auth/auth.module';
 import { InmobiliariaModule } from '../inmobiliaria/inmobiliaria.module';
@@ -16,7 +16,7 @@ import { MailModule } from '../mail/mail.module';
   imports: [
     MongooseModule.forFeature([
       { name: RedelexToken.name, schema: RedelexTokenSchema },
-      { name: CedulaProceso.name, schema: CedulaProcesoSchema },
+      { name: Proceso.name, schema: ProcesoSchema },
       { name: ApiTelemetry.name, schema: ApiTelemetrySchema },
       { name: CambioEtapa.name, schema: CambioEtapaSchema },
     ]),

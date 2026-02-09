@@ -1,8 +1,3 @@
-/*
-  Cambios (30-12-2025) - Santiago Obando:
-  - Ahora el servicio prioriza `user.ticketEmail || user.email` al buscar contactos y empresas en HubSpot.
-  - Motivo: usar el email ingresado en el formulario como contact/empresa lookup y reply-to.
-*/
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
@@ -21,6 +16,7 @@ interface UserContext {
 export class SupportService {
   private readonly logger = new Logger(SupportService.name);
   private readonly hubspotBaseUrl = 'https://api.hubapi.com/crm/v3/objects';
+  private readonly visitorIdUrl = 'https://api.hubapi.com/visitor-identification/v3/tokens/create';
 
   // private readonly DEFAULT_OWNER_ID = '81381349';
 
@@ -33,6 +29,29 @@ export class SupportService {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
+  }
+
+  async generateChatToken(email: string, firstName?: string, lastName?: string): Promise<string> {
+    // Necesitas un Token de App Privada en tu .env (HUBSPOT_ACCESS_TOKEN)
+    const hubspotToken = this.configService.get<string>('HUBSPOT_ACCESS_TOKEN');
+
+    try {
+      const response = await axios.post(
+        this.visitorIdUrl,
+        { email, firstName, lastName },
+        {
+          headers: {
+            Authorization: `Bearer ${hubspotToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return response.data.token;
+    } catch (error) {
+      console.error('Error generando token de HubSpot:', error.response?.data || error.message);
+      return '';
+    }
   }
 
   async searchHubSpotCompany(nit: string) {

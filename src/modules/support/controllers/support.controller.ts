@@ -6,6 +6,7 @@ import { Permissions } from '../../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../../../common/constants/permissions.constant';
 import { CreateCallTicketDto } from '../dto/call-ticket.dto';
 import { InmobiliariaService } from '../../inmobiliaria/services/inmobiliaria.service';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 
 @Controller('support')
 @UseGuards(SystemOrJwtGuard)
@@ -52,5 +53,16 @@ export class SupportController {
   async createCallTicket(@Body() dto: CreateCallTicketDto, @Req() req: any) {
     const userEmail = req.user?.email || 'sistema';
     return this.supportService.createCallTicket(dto, userEmail);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('chat-token')
+  async getChatToken(@Req() req) {
+    const { email, name } = req.user;
+    const [firstName, ...rest] = (name || '').split(' ');
+    const lastName = rest.join(' ');
+
+    const token = await this.supportService.generateChatToken(email, firstName, lastName);
+    return { token, email };
   }
 }

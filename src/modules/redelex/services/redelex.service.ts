@@ -532,13 +532,18 @@ export class RedelexService {
       const rol = String(item['Sujeto Intervencion'] ?? '').toUpperCase().trim();
 
       if (!procesosMap.has(pId)) {
+        let rawDespacho = String(item['Despacho'] || item['DespachoConocimiento'] || item['Juzgado'] || '').trim();
+        if (rawDespacho.includes('SIN ESPECIFICAR') || rawDespacho.includes('NO ESPECIFICADO')) {
+            rawDespacho = 'No registrado';
+        }
+
         procesosMap.set(pId, {
           procesoId: pId,
           numeroRadicacion: String(item['Numero Radicacion'] ?? '').replace(/'/g, '').trim(),
           codigoAlterno: String(item['Codigo Alterno'] ?? '').trim(),
           claseProceso: String(item['Clase Proceso'] ?? '').trim(),
           etapaProcesal: String(item['Etapa Procesal'] ?? '').trim(),
-          despacho: String(item['Despacho'] ?? '').trim(), 
+          despacho: rawDespacho || 'No registrado', 
           demandadoNombre: '', 
           demandadoIdentificacion: '',
           demandanteNombre: '', 

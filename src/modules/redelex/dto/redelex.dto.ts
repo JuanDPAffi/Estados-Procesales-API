@@ -78,6 +78,7 @@ export type InformeCedulaItem = {
   'Sujeto Intervencion': string;
   'Clase Proceso': string;
   'Etapa Procesal': string;
+  'Despacho': string;
 };
 
 export interface InformeInmobiliariaRaw {

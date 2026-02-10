@@ -499,11 +499,10 @@ export class MsGraphMailAdapter {
       const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.fromAddress)}/sendMail`;
 
       const hasChanges = cambios.length > 0;
-      const html = this.buildDailyReportHtml(cambios, fechaReporte); // Pasamos fecha al HTML también
+      const html = this.buildDailyReportHtml(cambios, fechaReporte);
 
       const message = {
         message: {
-          // Asunto dinámico: "📋 Reporte de Cambios (28 de enero) - Affi..."
           subject: hasChanges 
             ? `📋 Reporte de Cambios (${fechaReporte}) - ${this.brandName}`
             : `✅ Sin novedades (${fechaReporte}) - ${this.brandName}`,
@@ -633,6 +632,122 @@ export class MsGraphMailAdapter {
                   <p style="margin:0 0 4px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
                     Este es un mensaje automático, por favor no respondas a este correo.
                   </p>
+                  <p style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
+                    ${this.footerText}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+  }
+
+  async sendCallSummaryEmail(
+    to: string,
+    name: string,
+    ticketId: string,
+    query: string,
+    response: string
+  ): Promise<void> {
+    if (!this.fromAddress) {
+      throw new Error('MAIL_DEFAULT_FROM no configurado');
+    }
+
+    const accessToken = await this.getAccessToken();
+
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(
+      this.fromAddress,
+    )}/sendMail`;
+
+    const html = this.buildCallSummaryEmailHtml(name, ticketId, query, response);
+
+    const message = {
+      message: {
+        subject: `Resumen de atención - Ticket #${ticketId}`,
+        body: {
+          contentType: 'HTML',
+          content: html,
+        },
+        from: {
+          emailAddress: {
+            address: this.fromAddress,
+          },
+        },
+        toRecipients: [
+          {
+            emailAddress: {
+              address: to,
+            },
+          },
+        ],
+      },
+      saveToSentItems: true,
+    };
+
+    await axios.post(url, message, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  private buildCallSummaryEmailHtml(name: string, ticketId: string, query: string, response: string): string {
+    return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Resumen de Atención - ${this.brandName}</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f3f4f6;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f3f4f6; padding:24px 0;">
+        <tr>
+          <td align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 12px 30px rgba(15,23,42,0.12);">
+              <tr>
+                <td align="center" style="padding:24px 24px 12px 24px;">
+                   ${
+                      this.logoUrl
+                        ? `<img src="${this.logoUrl}" alt="${this.brandName}" style="max-width:120px; height:auto; display:block; margin-bottom:12px;" />`
+                        : ''
+                    }
+                  <h1 style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:20px; color:#111827;">
+                    Resumen de tu consulta
+                  </h1>
+                  <p style="margin-top:8px; font-size:14px; color:#6b7280;">Ticket ID: <strong>#${ticketId}</strong></p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:8px 24px 24px 24px;">
+                  <p style="margin:0 0 12px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#111827;">
+                    Hola <strong>${name}</strong>,
+                  </p>
+                  <p style="margin:0 0 16px 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; color:#4b5563;">
+                    Gracias por comunicarte con nosotros. A continuación, te enviamos el resumen de la atención brindada el día de hoy:
+                  </p>
+
+                  <div style="background-color:#f9fafb; padding:16px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:16px;">
+                    <h3 style="margin:0 0 8px 0; font-size:14px; color:#1e3a8a; font-weight:600;">Tu Consulta:</h3>
+                    <p style="margin:0; font-size:14px; color:#374151; line-height:1.5;">${query}</p>
+                  </div>
+
+                  <div style="background-color:#eff6ff; padding:16px; border-radius:8px; border-left:4px solid #260086; margin-bottom:16px;">
+                    <h3 style="margin:0 0 8px 0; font-size:14px; color:#1e3a8a; font-weight:600;">Nuestra Respuesta:</h3>
+                    <p style="margin:0; font-size:14px; color:#374151; line-height:1.5;">${response}</p>
+                  </div>
+
+                  <p style="margin:16px 0 0 0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:12px; color:#9ca3af;">
+                    Si tienes dudas adicionales, por favor comunícate por nuestras lineas de atención al cliente.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 24px 18px 24px; background-color:#f9fafb; border-top:1px solid #e5e7eb;">
                   <p style="margin:0; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:11px; color:#9ca3af;">
                     ${this.footerText}
                   </p>

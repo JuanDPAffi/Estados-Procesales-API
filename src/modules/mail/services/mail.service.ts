@@ -82,4 +82,28 @@ export class MailService {
       );
     }
   }
+
+  async sendCallSummaryEmail(
+    email: string,
+    name: string,
+    ticketId: string,
+    query: string,
+    response: string,
+  ): Promise<void> {
+    try {
+      await this.msGraphMailAdapter.sendCallSummaryEmail(
+        email,
+        name,
+        ticketId,
+        query,
+        response,
+      );
+      this.logger.log(`Correo de resumen de llamada enviado a: ${email} (Ticket ${ticketId})`);
+    } catch (error) {
+      this.logger.error(
+        `Error enviando correo de resumen a ${email}:`,
+        error?.response?.data || error,
+      );
+    }
+  }
 }

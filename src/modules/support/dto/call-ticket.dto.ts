@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateCallTicketDto {
@@ -67,4 +67,8 @@ export class CreateCallTicketDto {
   @IsString()
   @IsNotEmpty()
   response: string;
+
+  @IsOptional()
+  @IsBoolean()
+  sendNotification?: boolean;
 }

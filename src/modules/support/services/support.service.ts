@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
 import { CreateCallTicketDto } from '../dto/call-ticket.dto';
+import { MailService } from '../../mail/services/mail.service';
 
 interface UserContext {
   email: string;
@@ -16,10 +17,12 @@ interface UserContext {
 export class SupportService {
   private readonly logger = new Logger(SupportService.name);
   private readonly hubspotBaseUrl = 'https://api.hubapi.com/crm/v3/objects';
-
   // private readonly DEFAULT_OWNER_ID = '81381349';
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private mailService: MailService
+  ) {}
 
   private getHeaders() {
     const token = this.configService.get<string>('HUBSPOT_ACCESS_TOKEN');
@@ -153,6 +156,19 @@ export class SupportService {
 
     try {
       const response = await axios.post(`${this.hubspotBaseUrl}/tickets`, ticketData, { headers });
+      const ticketId = response.data.id;
+      if (dto.sendNotification && dto.contactEmail) {
+        this.mailService.sendCallSummaryEmail(
+          dto.contactEmail,
+          dto.contactName,
+          ticketId,
+          dto.query,
+          dto.response
+        ).catch(err => {
+
+          this.logger.error(`Error enviando resumen de llamada al ticket ${ticketId}`, err);
+        });
+      }
       return { 
         success: true, 
         ticketId: response.data.id, 

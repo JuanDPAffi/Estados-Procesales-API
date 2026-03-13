@@ -41,8 +41,8 @@ export class HubspotSyncService {
         'name',
         'zona_affi',
         'cluster',
-        'monto_afianzado',
-        'cantidad_de_contratos_afianzados'
+        'monto_afianzado_prueba',
+        'cantidad_de_contratos_afianzados_prueba'
       ]);
 
       // 4. Recolectar IDs de contactos únicos
@@ -110,8 +110,8 @@ export class HubspotSyncService {
           nombreInmobiliaria: company.properties.name,
           zonaAffi: company.properties.zona_affi,
           cluster: company.properties.cluster,
-          montoAfianzado: Number(company.properties.monto_afianzado || 0),
-          cantidadContratos: Number(company.properties.cantidad_de_contratos_afianzados || 0),
+          montoAfianzado: Number(company.properties.monto_afianzado_prueba || 0),
+          cantidadContratos: Number(company.properties.cantidad_de_contratos_afianzados_prueba || 0),
           hubspotOwnerId: ownerId
         };
         
